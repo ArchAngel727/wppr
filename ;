@@ -1,11 +1,9 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
-use std::{
-    fs::File,
-    io::prelude::*,
-    {env, path::PathBuf},
-};
+use std::{env, path::PathBuf};
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 #[allow(dead_code)]
 struct App {
@@ -38,26 +36,12 @@ async fn scrape_links(page: &str) -> Option<Vec<String>> {
     Some(links)
 }
 
+fn scrape_imgur() {
+    let selector = Selector::parse("image-placeholder");
+}
+
 fn get_image_hash(image: &[u8]) -> Vec<u8> {
     Sha256::digest(image).into_iter().collect::<Vec<u8>>()
-}
-
-async fn download_image(url: &str) -> Result<Vec<u8>, Error> {
-    Ok(reqwest::get(url)
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await
-        .unwrap()
-        .into_iter()
-        .collect())
-}
-
-fn save_file(name: &str, data: &[u8]) -> Result<(), Error> {
-    let mut file = File::create(name)?;
-    let _ = file.write_all(data);
-
-    Ok(())
 }
 
 #[tokio::main]
@@ -80,14 +64,25 @@ async fn main() -> Result<()> {
     println!("{:#?}", args);
 
     for link in links {
-        let img = download_image(&link).await?;
+        let img: Vec<u8> = reqwest::get(link.clone())
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await
+            .unwrap()
+            .into_iter()
+            .collect();
 
         let hash = get_image_hash(&img);
         println!("{:x?}", hash);
 
-        if let Some(name) = link.split("/").last() {
+        let a = link.split("/").last();
+        if let Some(name) = a {
             println!("{}", name);
-            let _ = save_file(name, &img);
+            let mut file = File::create("img.png").await?;
+            hash.iter().for_each(|byte| {
+                let _ = file.write_u8(*byte);
+            });
         }
     }
 
@@ -112,18 +107,3 @@ async fn main() -> Result<()> {
 //            println!("{}", result);
 //        }
 //    }
-//
-//async fn scrape_imgur(url: &str) -> Result<Option<String>, Error> {
-//    let page = reqwest::get(url).await?.error_for_status()?.text().await?;
-//    let document = Html::parse_document(&page);
-//    let selector = Selector::parse(".image-placeholder").unwrap();
-//
-//    if let Some(img) = document.select(&selector).next() {
-//        match img.value().attr("href") {
-//            Some(href) => Ok(Some(href.to_string())),
-//            _ => Ok(None),
-//        }
-//    } else {
-//        Ok(None)
-//    }
-//}
