@@ -1,15 +1,23 @@
 use anyhow::{Error, Result};
 use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    fs::File,
+    env,
+    fs::{self, File},
     io::prelude::*,
-    {env, path::PathBuf},
+    path::{Path, PathBuf},
 };
 
-#[allow(dead_code)]
-struct App {
-    save_dir: PathBuf,
+struct App<'a> {
+    config: Config,
+    args: &'a [String],
+}
+
+impl<'a> App<'a> {
+    pub fn new(config: Config, args: &'a [String]) -> App<'a> {
+        App { config, args }
+    }
 }
 
 async fn download_page(url: &str) -> Result<String, reqwest::Error> {
@@ -53,11 +61,124 @@ async fn download_image(url: &str) -> Result<Vec<u8>, Error> {
         .collect())
 }
 
-fn save_file(name: &str, data: &[u8]) -> Result<(), Error> {
+fn save_file(name: &Path, data: &[u8]) -> Result<()> {
+    if !Path::new("./Downloads/").is_dir() {
+        let _ = fs::create_dir("./Downloads");
+    }
+
     let mut file = File::create(name)?;
     let _ = file.write_all(data);
 
     Ok(())
+}
+
+fn reload_wallpaper(app: &App) {
+    // check if wallpaper exists
+    // make call to awww to set wallpaper
+    // check if awww exists
+
+    if !app.config.current_wallpaper.exists() {
+        return;
+    }
+
+    println!("{}", app.config.current_wallpaper.display());
+}
+
+async fn scrape(app: &mut App<'_>) -> Result<()> {
+    //let url = if !app.args.is_empty() {
+    //    app.args[0].to_string()
+    //} else {
+    //    "https://wallpaper-a-day.com/".to_string()
+    //};
+
+    let url = "https://wallpaper-a-day.com/".to_string();
+
+    if !url.starts_with("http") {
+        return Ok(());
+    }
+
+    let page = download_page(&url).await?;
+    let links: Vec<String> = scrape_links(&page).await.expect("ASDFF");
+
+    if !app.config.save_dir.exists()
+        && let Some(home) = home::home_dir()
+    {
+        println!("{}", home.display());
+        let dir_path = PathBuf::from(format!("{}/Pictures/wppr", home.display()));
+        println!("{}", dir_path.display());
+        fs::create_dir_all(&dir_path)?;
+        app.config.save_dir = dir_path;
+    }
+
+    let save_dir = app.config.save_dir.clone();
+    println!("Save dir: {}", save_dir.display());
+
+    for link in links {
+        let img = download_image(&link).await?;
+
+        //let hash = get_image_hash(&img);
+
+        if let Some(name) = link.split("/").last() {
+            let file_path = format!("{}/{}", save_dir.display(), name);
+            let path = Path::new(&file_path);
+
+            if path.exists() {
+                let local_img = std::fs::read(path)?;
+                if img == local_img {
+                    println!("{}", img == local_img);
+                    continue;
+                }
+            }
+
+            save_file(path, &img)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn menu(app: &mut App<'_>) -> Result<()> {
+    if app.args.is_empty() {
+        //print_help_menu();
+        return Ok(());
+    }
+
+    match app.args[0].as_str() {
+        "reload" => reload_wallpaper(app),
+        "pick" => println!("B"),
+        "scrape" => scrape(app).await?,
+        _ => println!("Aw HELL NAHHH!"),
+    };
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct Config {
+    current_wallpaper: PathBuf,
+    current_dir: PathBuf,
+    save_dir: PathBuf,
+}
+
+fn load_config() -> Result<Config> {
+    let path = Path::new("./config.json");
+
+    let default_config = r#"{
+        "current_wallpaper": "",
+        "current_dir": "",
+        "save_dir": ""
+    }"#;
+
+    if !path.exists() {
+        let mut file = File::create(path)?;
+        file.write_all(default_config.as_bytes())?;
+        return Ok(serde_json::from_str(default_config)?);
+    }
+
+    let s = fs::read_to_string(path)?;
+    let config: Config = serde_json::from_str(s.as_str())?;
+
+    Ok(config)
 }
 
 #[tokio::main]
@@ -66,30 +187,16 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let args = &env::args().collect::<Vec<String>>()[1..];
-    let url = if !args.is_empty() {
-        args[0].to_string()
-    } else {
-        "https://wallpaper-a-day.com/".to_string()
-    };
+    let config = load_config()?;
+    let args = &env::args()
+        .collect::<Vec<String>>()
+        .iter()
+        .map(|arg| arg.to_lowercase())
+        .collect::<Vec<String>>()[1..];
 
-    let page = download_page(&url).await?;
-    let links: Vec<String> = scrape_links(&page).await.expect("ASDFF");
+    let mut app = App::new(config, args);
 
-    println!("{:#?}", links);
-    println!("{:#?}", args);
-
-    for link in links {
-        let img = download_image(&link).await?;
-
-        let hash = get_image_hash(&img);
-        println!("{:x?}", hash);
-
-        if let Some(name) = link.split("/").last() {
-            println!("{}", name);
-            let _ = save_file(name, &img);
-        }
-    }
+    menu(&mut app).await?;
 
     Ok(())
 }
@@ -112,7 +219,7 @@ async fn main() -> Result<()> {
 //            println!("{}", result);
 //        }
 //    }
-//
+
 //async fn scrape_imgur(url: &str) -> Result<Option<String>, Error> {
 //    let page = reqwest::get(url).await?.error_for_status()?.text().await?;
 //    let document = Html::parse_document(&page);
