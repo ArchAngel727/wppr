@@ -160,7 +160,7 @@ async fn process_image(link: String, save_dir: &Path) -> Result<()> {
 
     let mut path = PathBuf::from(save_dir);
     path.push(name);
-    path.set_extension(".png");
+    path.set_extension("png");
 
     if path.exists() {
         let local_img = std::fs::read(&path)?;
