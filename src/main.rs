@@ -205,9 +205,20 @@ async fn scrape_tags() -> Result<Vec<String>> {
     Ok(tags)
 }
 
+fn print_help_menu() {
+    let mut help_text = String::from("Wppr parameters:\n");
+    help_text.push_str("  reload: reload current wallpaper\n");
+    help_text.push_str("  pick: pick wallpaper from file system\n");
+    help_text.push_str("  scrape: download latest wallpaper from wallpaper-a-day\n");
+    help_text.push_str("    tag: select tag to scrape");
+
+    println!("{help_text}");
+}
+
 async fn menu(app: &mut App<'_>) -> Result<()> {
     if app.args.is_empty() {
-        todo!("print_help_menu");
+        print_help_menu();
+        return Ok(());
     }
 
     let len_args = app.args.len();
