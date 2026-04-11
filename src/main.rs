@@ -1,9 +1,10 @@
 mod awww_controller;
 
 use anyhow::{Error, Result, anyhow};
+use chrono::prelude::*;
 use futures::future::join_all;
 use regex::Regex;
-use scraper::{Html, Selector};
+use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -24,25 +25,29 @@ impl<'a> App<'a> {
     pub fn new(config: Config, args: &'a [String]) -> App<'a> {
         App { config, args }
     }
+}
 
-    pub fn save_file(&self, path: &Path, data: &[u8]) -> Result<()> {
-        if !self.config.save_dir.is_dir() {
-            fs::create_dir(&self.config.save_dir)?;
+#[derive(PartialOrd, PartialEq, Eq)]
+struct Image {
+    link: String,
+    date: NaiveDate,
+}
+
+impl Image {
+    fn new() -> Image {
+        Image {
+            link: String::new(),
+            date: NaiveDate::default(),
         }
-
-        let mut file = File::create(path)?;
-        file.write_all(data)?;
-
-        Ok(())
     }
 }
 
-pub fn save_file(path: &Path, data: &[u8], save_dir: &Path) -> Result<()> {
-    if !save_dir.is_dir() {
-        fs::create_dir(save_dir)?;
+pub fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
+    if !dir.is_dir() {
+        fs::create_dir(dir)?;
     }
 
-    let mut file = File::create(path)?;
+    let mut file = File::create(name)?;
     file.write_all(data)?;
 
     Ok(())
@@ -52,8 +57,8 @@ async fn download_page(url: &str) -> Result<String, reqwest::Error> {
     reqwest::get(url).await?.error_for_status()?.text().await
 }
 
-async fn scrape_links(page: &str) -> Result<Vec<String>> {
-    let mut links: Vec<String> = vec![];
+async fn scrape_links(page: &str) -> Result<Vec<Image>> {
+    let mut links: Vec<Image> = vec![];
     let regex = Regex::new(r#"\/d\/(.*?)\/view"#)?;
 
     let document = Html::parse_document(page);
@@ -61,29 +66,49 @@ async fn scrape_links(page: &str) -> Result<Vec<String>> {
     let main_selector = Selector::parse("main").unwrap();
     let article_selector = Selector::parse("article.post").unwrap();
     let link_selector = Selector::parse("a").unwrap();
+    let date_selector = Selector::parse("time").unwrap();
 
     document.select(&main_selector).for_each(|e| {
-        e.select(&article_selector).for_each(|el| {
-            el.select(&link_selector)
+        e.select(&article_selector).for_each(|article| {
+            let mut image = Image::new();
+
+            article
+                .select(&link_selector)
                 .for_each(|link| match link.value().attr("href") {
                     Some(href) => {
-                        if href.ends_with(".png") || href.ends_with("sharing") {
-                            let link = href.to_string();
+                        if !(href.ends_with(".png") || href.ends_with("sharing")) {
+                            return;
+                        }
 
-                            if link.ends_with("sharing")
-                                && let Some(id) = regex.captures(&link)
-                            {
-                                links.push(format!(
-                                    "https://drive.google.com/uc?export=view&id={}",
-                                    &id[1]
-                                ));
-                            } else {
-                                links.push(link)
-                            }
+                        let link = href.to_string();
+
+                        if link.ends_with("sharing")
+                            && let Some(id) = regex.captures(&link)
+                        {
+                            image.link =
+                                format!("https://drive.google.com/uc?export=view&id={}", &id[1]);
+                        } else {
+                            image.link = link
                         }
                     }
                     _ => println!("a tag has no href"),
-                })
+                });
+
+            article.select(&date_selector).for_each(|time: ElementRef| {
+                if let Some(date_str) = time.value().attr("datetime") {
+                    let date = match DateTime::parse_from_rfc3339(date_str) {
+                        Ok(date) => date,
+                        Err(e) => {
+                            println!("{e}");
+                            return;
+                        }
+                    };
+
+                    image.date = date.date_naive();
+                }
+            });
+
+            links.push(image);
         });
     });
 
@@ -136,24 +161,30 @@ async fn scrape(app: &mut App<'_>) -> Result<()> {
     }
 
     let page = download_page(&url).await?;
-    let links: Vec<String> = scrape_links(&page).await?;
+    let links = &scrape_links(&page).await?[..3];
 
     let save_dir = app.config.save_dir.clone();
 
     let futures: Vec<_> = links
-        .into_iter()
+        .iter()
         .map(|link| process_image(link, &save_dir))
         .collect();
 
-    let res = join_all(futures).await;
+    let mut res: Vec<_> = join_all(futures)
+        .await
+        .into_iter()
+        .filter_map(Result::ok)
+        .collect();
+    res.sort_by_key(|k| k.1);
+    res.reverse();
 
-    println!("{:?}", res);
+    println!("{:#?}", res);
     Ok(())
 }
 
-async fn process_image(link: String, save_dir: &Path) -> Result<()> {
-    let img = download_image(&link).await?;
-    let name: String = Sha256::digest(&link).to_vec()[..8]
+async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, NaiveDate)> {
+    let img = download_image(&image.link).await?;
+    let name: String = Sha256::digest(&image.link).to_vec()[..8]
         .iter()
         .map(|c| format!("{:02x}", c))
         .collect();
@@ -166,14 +197,15 @@ async fn process_image(link: String, save_dir: &Path) -> Result<()> {
         let local_img = std::fs::read(&path)?;
 
         if img != local_img {
-            save_file(&path, &img, save_dir)?;
+            save_file(save_dir, &path, &img)?;
         }
     } else {
-        save_file(&path, &img, save_dir)?;
+        println!("Saving file");
+        save_file(save_dir, &path, &img)?;
     }
 
-    println!("Finished processing image {link}");
-    Ok(())
+    println!("Finished processing image {}", image.link);
+    Ok((path, image.date))
 }
 
 async fn menu(app: &mut App<'_>) -> Result<()> {
