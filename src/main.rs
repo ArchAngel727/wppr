@@ -1,11 +1,18 @@
+mod app;
 mod awww_controller;
+mod config;
+mod image;
+
+use crate::app::App;
+use crate::awww_controller::AwwwControlle;
+use crate::config::Config;
+use crate::image::Image;
 
 use anyhow::{Error, Result, anyhow};
-use chrono::prelude::*;
+use chrono::{DateTime, FixedOffset};
 use futures::future::join_all;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     env,
@@ -13,34 +20,6 @@ use std::{
     io::prelude::*,
     path::{Path, PathBuf},
 };
-
-use crate::awww_controller::AwwwControlle;
-
-struct App<'a> {
-    config: Config,
-    args: &'a [String],
-}
-
-impl<'a> App<'a> {
-    pub fn new(config: Config, args: &'a [String]) -> App<'a> {
-        App { config, args }
-    }
-}
-
-#[derive(PartialOrd, PartialEq, Eq)]
-struct Image {
-    link: String,
-    date: NaiveDate,
-}
-
-impl Image {
-    fn new() -> Image {
-        Image {
-            link: String::new(),
-            date: NaiveDate::default(),
-        }
-    }
-}
 
 pub fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
     if !dir.is_dir() {
@@ -104,7 +83,7 @@ async fn scrape_links(page: &str) -> Result<Vec<Image>> {
                         }
                     };
 
-                    image.date = date.date_naive();
+                    image.date = date;
                 }
             });
 
@@ -141,13 +120,7 @@ fn reload_wallpaper(app: &App) -> Result<()> {
     Ok(())
 }
 
-async fn scrape(app: &mut App<'_>) -> Result<()> {
-    let url = if app.args.len() > 1 {
-        app.args[1].to_string()
-    } else {
-        "https://wallpaper-a-day.com/".to_string()
-    };
-
+async fn scrape(app: &mut App<'_>, url: &str) -> Result<()> {
     if !url.starts_with("http") {
         return Err(anyhow!("Invalid url"));
     }
@@ -160,7 +133,7 @@ async fn scrape(app: &mut App<'_>) -> Result<()> {
         app.config.save_dir = dir_path;
     }
 
-    let page = download_page(&url).await?;
+    let page = download_page(url).await?;
     let links = &scrape_links(&page).await?[..3];
 
     let save_dir = app.config.save_dir.clone();
@@ -179,11 +152,13 @@ async fn scrape(app: &mut App<'_>) -> Result<()> {
     res.reverse();
 
     println!("{:#?}", res);
+
+    AwwwControlle::set_wallpaper(&res[0].0)?;
+
     Ok(())
 }
 
-async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, NaiveDate)> {
-    let img = download_image(&image.link).await?;
+async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, DateTime<FixedOffset>)> {
     let name: String = Sha256::digest(&image.link).to_vec()[..8]
         .iter()
         .map(|c| format!("{:02x}", c))
@@ -193,19 +168,41 @@ async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, Naive
     path.push(name);
     path.set_extension("png");
 
-    if path.exists() {
-        let local_img = std::fs::read(&path)?;
-
-        if img != local_img {
-            save_file(save_dir, &path, &img)?;
-        }
-    } else {
-        println!("Saving file");
+    if !path.exists() {
+        let img = download_image(&image.link).await?;
         save_file(save_dir, &path, &img)?;
     }
 
-    println!("Finished processing image {}", image.link);
     Ok((path, image.date))
+}
+
+async fn scrape_tags() -> Result<Vec<String>> {
+    let page = reqwest::get("https://wallpaper-a-day.com/category/")
+        .await?
+        .text()
+        .await?;
+
+    let document = Html::parse_document(&page);
+    let mut tags: Vec<String> = vec![];
+
+    let selector = Selector::parse("li.cat-item").unwrap();
+    let link_selector = Selector::parse("a").unwrap();
+
+    document.select(&selector).for_each(|li| {
+        li.select(&link_selector).for_each(|link| {
+            tags.push(
+                link.text()
+                    .map(|str| str.to_string().replace(" ", "-").replace("/", "-"))
+                    .collect(),
+            );
+        });
+    });
+
+    tags.sort();
+    tags.dedup();
+    tags = tags.iter().map(|str| str.to_ascii_lowercase()).collect();
+
+    Ok(tags)
 }
 
 async fn menu(app: &mut App<'_>) -> Result<()> {
@@ -214,21 +211,29 @@ async fn menu(app: &mut App<'_>) -> Result<()> {
         return Ok(());
     }
 
+    let len_args = app.args.len();
+
     match app.args[0].as_str() {
         "reload" => reload_wallpaper(app)?,
         "pick" => println!("B"),
-        "scrape" => scrape(app).await?,
+        "scrape" => {
+            let mut url = "https://wallpaper-a-day.com".to_string();
+            let tags = scrape_tags().await?;
+
+            if len_args >= 3
+                && "category".contains(&app.args[1])
+                && let Some(tag) = tags.iter().find(|tag| tag.contains(&app.args[2]))
+            {
+                url.push_str("/category/");
+                url.push_str(tag);
+            }
+
+            scrape(app, &url).await?;
+        }
         _ => println!("Aw HELL NAHHH!"),
     };
 
     Ok(())
-}
-
-#[derive(Serialize, Deserialize)]
-struct Config {
-    current_wallpaper: PathBuf,
-    current_dir: PathBuf,
-    save_dir: PathBuf,
 }
 
 fn load_config() -> Result<Config> {
