@@ -207,15 +207,14 @@ async fn scrape_tags() -> Result<Vec<String>> {
 
 async fn menu(app: &mut App<'_>) -> Result<()> {
     if app.args.is_empty() {
-        //print_help_menu();
-        return Ok(());
+        todo!("print_help_menu");
     }
 
     let len_args = app.args.len();
 
     match app.args[0].as_str() {
         "reload" => reload_wallpaper(app)?,
-        "pick" => println!("B"),
+        "pick" => todo!("pick"),
         "scrape" => {
             let mut url = "https://wallpaper-a-day.com".to_string();
             let tags = scrape_tags().await?;
@@ -266,13 +265,6 @@ async fn main() -> Result<()> {
         return Err(anyhow!("awww is not installed"));
     }
 
-    //println!(
-    //    "{:#?}",
-    //    scrape_links(&download_page("https://wallpaper-a-day.com/").await?)
-    //        .await
-    //        .unwrap()
-    //);
-
     let config = load_config()?;
     let args = &env::args()
         .collect::<Vec<String>>()
@@ -286,28 +278,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-//
-//    match Command::new("dwu").args(["--save-dir", "~/.dwu"]).output() {
-//        Ok(result) => result.stdout.iter().for_each(|f| {
-//            print!("{}", *f as char);
-//        }),
-//        Err(result) => {
-//            println!("{}", result);
-//        }
-//    }
-
-//async fn scrape_imgur(url: &str) -> Result<Option<String>, Error> {
-//    let page = reqwest::get(url).await?.error_for_status()?.text().await?;
-//    let document = Html::parse_document(&page);
-//    let selector = Selector::parse(".image-placeholder").unwrap();
-//
-//    if let Some(img) = document.select(&selector).next() {
-//        match img.value().attr("href") {
-//            Some(href) => Ok(Some(href.to_string())),
-//            _ => Ok(None),
-//        }
-//    } else {
-//        Ok(None)
-//    }
-//}
