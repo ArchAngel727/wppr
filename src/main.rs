@@ -221,8 +221,8 @@ async fn menu(app: &mut App<'_>) -> Result<()> {
             let tags = scrape_tags().await?;
 
             if len_args >= 3
-                && "category".contains(&app.args[1])
-                && let Some(tag) = tags.iter().find(|tag| tag.contains(&app.args[2]))
+                && "category".starts_with(&app.args[1])
+                && let Some(tag) = tags.iter().find(|tag| tag.starts_with(&app.args[2]))
             {
                 url.push_str("/category/");
                 url.push_str(tag);
