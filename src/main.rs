@@ -15,13 +15,13 @@ use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use sha2::{Digest, Sha256};
 use std::{
-    env,
+    any, env,
     fs::{self, File},
     io::prelude::*,
     path::{Path, PathBuf},
 };
 
-pub fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
+fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
     if !dir.is_dir() {
         fs::create_dir(dir)?;
     }
@@ -106,11 +106,8 @@ async fn download_image(url: &str) -> Result<Vec<u8>, Error> {
 }
 
 fn reload_wallpaper(app: &App) -> Result<()> {
-    // check if wallpaper exists
-    // make call to awww to set wallpaper
-    // check if awww exists
-
     if !app.config.current_wallpaper.exists() {
+        println!("{}", app.config.current_wallpaper.display());
         return Err(anyhow!("No wallpaper selected"));
     }
 
@@ -153,7 +150,9 @@ async fn scrape(app: &mut App<'_>, url: &str) -> Result<()> {
 
     println!("{:#?}", res);
 
-    AwwwControlle::set_wallpaper(&res[0].0)?;
+    app.config.current_wallpaper = res[0].0.clone();
+    AwwwControlle::set_wallpaper(&app.config.current_wallpaper)?;
+    save_config(app)?;
 
     Ok(())
 }
@@ -246,9 +245,20 @@ async fn menu(app: &mut App<'_>) -> Result<()> {
     Ok(())
 }
 
-fn load_config() -> Result<Config> {
-    let path = Path::new("./config.json");
+fn save_config(app: &App) -> Result<()> {
+    if !app.config_path.exists()
+        && let Some(dir) = app.config_path.parent()
+    {
+        fs::create_dir_all(dir)?;
+    }
 
+    let mut file = File::create(app.config_path)?;
+    file.write_all(&serde_json::to_vec_pretty(&app.config)?)?;
+
+    Ok(())
+}
+
+fn load_config(path: &Path) -> Result<Config> {
     let default_config = r#"{
         "current_wallpaper": "",
         "current_dir": "",
@@ -261,8 +271,7 @@ fn load_config() -> Result<Config> {
         return Ok(serde_json::from_str(default_config)?);
     }
 
-    let s = fs::read_to_string(path)?;
-    let config: Config = serde_json::from_str(s.as_str())?;
+    let config = serde_json::from_str(fs::read_to_string(path)?.as_str())?;
 
     Ok(config)
 }
@@ -276,14 +285,20 @@ async fn main() -> Result<()> {
         return Err(anyhow!("awww is not installed"));
     }
 
-    let config = load_config()?;
+    let config_path = PathBuf::from(if let Some(home) = home::home_dir() {
+        format!("{}/.config/wppr/config.json", home.display())
+    } else {
+        return Err(anyhow!("Could not find home dir"));
+    });
+
+    let config = load_config(&config_path)?;
     let args = &env::args()
         .collect::<Vec<String>>()
         .iter()
         .map(|arg| arg.to_lowercase())
         .collect::<Vec<String>>()[1..];
 
-    let mut app = App::new(config, args);
+    let mut app = App::new(&config_path, config, args);
 
     menu(&mut app).await?;
 
