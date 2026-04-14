@@ -12,10 +12,10 @@ use anyhow::{Error, Result, anyhow};
 use chrono::{DateTime, FixedOffset};
 use futures::future::join_all;
 use regex::Regex;
-use scraper::{ElementRef, Html, Selector};
+use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 use std::{
-    any, env,
+    env,
     fs::{self, File},
     io::prelude::*,
     path::{Path, PathBuf},
@@ -47,49 +47,40 @@ async fn scrape_links(page: &str) -> Result<Vec<Image>> {
     let link_selector = Selector::parse("a").unwrap();
     let date_selector = Selector::parse("time").unwrap();
 
-    document.select(&main_selector).for_each(|e| {
-        e.select(&article_selector).for_each(|article| {
-            let mut image = Image::new();
+    let main = document.select(&main_selector).collect::<Vec<_>>()[0];
 
-            article
-                .select(&link_selector)
-                .for_each(|link| match link.value().attr("href") {
-                    Some(href) => {
-                        if !(href.ends_with(".png") || href.ends_with("sharing")) {
-                            return;
-                        }
+    for article in main.select(&article_selector) {
+        let mut image = Image::new();
 
-                        let link = href.to_string();
+        if let Some(href) = article
+            .select(&link_selector)
+            .filter_map(|link| link.value().attr("href").map(str::to_string))
+            .find(|href| href.ends_with(".png") || href.ends_with("sharing"))
+        {
+            if href.ends_with("sharing")
+                && let Some(id) = regex.captures(&href)
+            {
+                image.link = format!("https://drive.google.com/uc?export=view&id={}", &id[1]);
+            } else {
+                image.link = href
+            }
+        }
 
-                        if link.ends_with("sharing")
-                            && let Some(id) = regex.captures(&link)
-                        {
-                            image.link =
-                                format!("https://drive.google.com/uc?export=view&id={}", &id[1]);
-                        } else {
-                            image.link = link
-                        }
-                    }
-                    _ => println!("a tag has no href"),
-                });
-
-            article.select(&date_selector).for_each(|time: ElementRef| {
-                if let Some(date_str) = time.value().attr("datetime") {
-                    let date = match DateTime::parse_from_rfc3339(date_str) {
-                        Ok(date) => date,
-                        Err(e) => {
-                            println!("{e}");
-                            return;
-                        }
-                    };
-
-                    image.date = date;
+        if let Some(date_str) = article
+            .select(&date_selector)
+            .filter_map(|date_element| date_element.value().attr("datetime"))
+            .next()
+        {
+            match DateTime::parse_from_rfc3339(date_str) {
+                Ok(date) => image.date = date,
+                Err(e) => {
+                    return Err(anyhow!("Failed to parse date {e}"));
                 }
-            });
+            };
+        }
 
-            links.push(image);
-        });
-    });
+        links.push(image);
+    }
 
     Ok(links)
 }

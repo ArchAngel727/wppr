@@ -25,9 +25,3 @@ impl AwwwControlle {
         Ok(())
     }
 }
-
-/*
-data.stdout.iter().for_each(|f| {
-    print!("{}", *f as char);
-});
-*/
