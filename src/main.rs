@@ -21,13 +21,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
-    if !dir.is_dir() {
-        fs::create_dir(dir)?;
-    }
-
-    let mut file = File::create(name)?;
-    file.write_all(data)?;
+async fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
+    tokio::fs::create_dir_all(dir).await?;
+    tokio::fs::write(name, data).await?;
 
     Ok(())
 }
@@ -154,13 +150,12 @@ async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, DateT
         .map(|c| format!("{:02x}", c))
         .collect();
 
-    let mut path = PathBuf::from(save_dir);
-    path.push(name);
-    path.set_extension("png");
+    let path = PathBuf::from(save_dir);
+    path.join(name).set_extension("png");
 
     if !path.exists() {
         let img = download_image(&image.link).await?;
-        save_file(save_dir, &path, &img)?;
+        save_file(save_dir, &path, &img).await?;
     }
 
     Ok((path, image.date))
