@@ -1,21 +1,24 @@
 mod app;
 mod awww_controller;
+mod cli;
 mod config;
-mod image;
+mod local_image;
+mod online_image;
 
-use crate::app::App;
 use crate::awww_controller::AwwwControlle;
+use crate::cli::Cli;
 use crate::config::Config;
-use crate::image::Image;
+use crate::online_image::OnlineImage;
+use crate::{app::App, local_image::LocalImage};
 
 use anyhow::{Error, Result, anyhow};
 use chrono::{DateTime, FixedOffset};
+use clap::Parser;
 use futures::future::join_all;
 use regex::Regex;
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 use std::{
-    env,
     fs::{self as stdfs, File},
     io::prelude::*,
     path::{Path, PathBuf},
@@ -33,8 +36,8 @@ async fn download_page(url: &str) -> Result<String, reqwest::Error> {
     reqwest::get(url).await?.error_for_status()?.text().await
 }
 
-async fn scrape_links(page: &str) -> Result<Vec<Image>> {
-    let mut links: Vec<Image> = vec![];
+async fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
+    let mut links: Vec<OnlineImage> = vec![];
     let regex = Regex::new(r#"\/d\/(.*?)\/view"#)?;
 
     let document = Html::parse_document(page);
@@ -47,7 +50,7 @@ async fn scrape_links(page: &str) -> Result<Vec<Image>> {
     let main = document.select(&main_selector).collect::<Vec<_>>()[0];
 
     for article in main.select(&article_selector) {
-        let mut image = Image::new();
+        let mut image = OnlineImage::new();
 
         if let Some(href) = article
             .select(&link_selector)
@@ -105,7 +108,7 @@ fn reload_wallpaper(app: &App) -> Result<()> {
     Ok(())
 }
 
-async fn scrape(app: &mut App<'_>, url: &str) -> Result<()> {
+async fn scrape(app: &mut App<'_>, url: &str, backstep: u32) -> Result<()> {
     if !url.starts_with("http") {
         return Err(anyhow!("Invalid url"));
     }
@@ -118,10 +121,9 @@ async fn scrape(app: &mut App<'_>, url: &str) -> Result<()> {
         app.config.save_dir = dir_path;
     }
 
-    let page = download_page(url).await?;
-    let links = &scrape_links(&page).await?[..3];
-
     let save_dir = app.config.save_dir.clone();
+    let page = download_page(url).await?;
+    let links = &scrape_links(&page).await?[backstep as usize..4];
 
     let futures: Vec<_> = links
         .iter()
@@ -133,19 +135,19 @@ async fn scrape(app: &mut App<'_>, url: &str) -> Result<()> {
         .into_iter()
         .filter_map(Result::ok)
         .collect();
-    res.sort_by_key(|k| k.1);
+    res.sort_by_key(|k| k.date);
     res.reverse();
 
-    println!("{:#?}", res);
+    res.iter().for_each(|img| println!("{}", img));
 
-    app.config.current_wallpaper = res[0].0.clone();
+    app.config.current_wallpaper = res[0].path.clone();
     AwwwControlle::set_wallpaper(&app.config.current_wallpaper)?;
     save_config(app)?;
 
     Ok(())
 }
 
-async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, DateTime<FixedOffset>)> {
+async fn process_image(image: &OnlineImage, save_dir: &Path) -> Result<LocalImage> {
     let name: String = Sha256::digest(&image.link).to_vec()[..8]
         .iter()
         .map(|c| format!("{:02x}", c))
@@ -158,7 +160,7 @@ async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, DateT
         save_file(save_dir, &path, &img).await?;
     }
 
-    Ok((path, image.date))
+    Ok((path, image.date).into())
 }
 
 async fn scrape_tags() -> Result<Vec<String>> {
@@ -188,47 +190,6 @@ async fn scrape_tags() -> Result<Vec<String>> {
     tags = tags.iter().map(|str| str.to_ascii_lowercase()).collect();
 
     Ok(tags)
-}
-
-fn print_help_menu() {
-    let mut help_text = String::from("Wppr parameters:\n");
-    help_text.push_str("  reload: reload current wallpaper\n");
-    help_text.push_str("  pick: pick wallpaper from file system\n");
-    help_text.push_str("  scrape: download latest wallpaper from wallpaper-a-day\n");
-    help_text.push_str("    tag: select tag to scrape");
-
-    println!("{help_text}");
-}
-
-async fn menu(app: &mut App<'_>) -> Result<()> {
-    if app.args.is_empty() {
-        print_help_menu();
-        return Ok(());
-    }
-
-    let len_args = app.args.len();
-
-    match app.args[0].as_str() {
-        "reload" => reload_wallpaper(app)?,
-        "pick" => todo!("pick"),
-        "scrape" => {
-            let mut url = "https://wallpaper-a-day.com".to_string();
-            let tags = scrape_tags().await?;
-
-            if len_args >= 3
-                && "category".starts_with(&app.args[1])
-                && let Some(tag) = tags.iter().find(|tag| tag.starts_with(&app.args[2]))
-            {
-                url.push_str("/category/");
-                url.push_str(tag);
-            }
-
-            scrape(app, &url).await?;
-        }
-        _ => println!("Aw HELL NAHHH!"),
-    };
-
-    Ok(())
 }
 
 fn save_config(app: &App) -> Result<()> {
@@ -267,10 +228,38 @@ fn load_config(path: &Path) -> Result<Config> {
     }
 }
 
+async fn menu(app: &mut App<'_>) -> Result<()> {
+    let mut url = "https://wallpaper-a-day.com".to_string();
+
+    match &app.args.command {
+        cli::Commands::Reload => reload_wallpaper(app)?,
+        cli::Commands::Pick => todo!("pick"),
+        cli::Commands::Scrape { tag, backstep } => {
+            let tags = scrape_tags().await?;
+
+            if let Some(tag) = tag {
+                match tags.iter().find(|t| t.starts_with(tag)) {
+                    Some(tag) => {
+                        url.push_str("/category/");
+                        url.push_str(tag);
+                    }
+                    None => todo!(),
+                }
+            }
+
+            scrape(app, &url, backstep.unwrap_or(0)).await?;
+        }
+    };
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     compile_error!("AW HELL NAH I AINT RUNNING ON {}", target_os);
+
+    let cli = Cli::parse();
 
     if !AwwwControlle::is_installed() {
         return Err(anyhow!("awww is not installed"));
@@ -283,15 +272,7 @@ async fn main() -> Result<()> {
     });
 
     let config = load_config(&config_path)?;
-    let args = &env::args()
-        .collect::<Vec<String>>()
-        .iter()
-        .map(|arg| arg.to_lowercase())
-        .collect::<Vec<String>>()[1..];
-
-    let mut app = App::new(&config_path, config, args);
-
-    println!("{:?}", args);
+    let mut app = App::new(&config_path, config, cli);
 
     menu(&mut app).await?;
 
