@@ -12,7 +12,7 @@ use crate::online_image::OnlineImage;
 use crate::{app::App, local_image::LocalImage};
 
 use anyhow::{Error, Result, anyhow};
-use chrono::{DateTime, FixedOffset};
+use chrono::DateTime;
 use clap::Parser;
 use futures::future::join_all;
 use regex::Regex;
