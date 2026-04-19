@@ -16,10 +16,11 @@ use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 use std::{
     env,
-    fs::{self, File},
+    fs::{self as stdfs, File},
     io::prelude::*,
     path::{Path, PathBuf},
 };
+use tokio::fs;
 
 async fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
     tokio::fs::create_dir_all(dir).await?;
@@ -113,7 +114,7 @@ async fn scrape(app: &mut App<'_>, url: &str) -> Result<()> {
         && let Some(home) = home::home_dir()
     {
         let dir_path = PathBuf::from(format!("{}/Pictures/wppr", home.display()));
-        fs::create_dir_all(&dir_path)?;
+        fs::create_dir_all(&dir_path).await?;
         app.config.save_dir = dir_path;
     }
 
@@ -150,8 +151,7 @@ async fn process_image(image: &Image, save_dir: &Path) -> Result<(PathBuf, DateT
         .map(|c| format!("{:02x}", c))
         .collect();
 
-    let path = PathBuf::from(save_dir);
-    path.join(name).set_extension("png");
+    let path = PathBuf::from(save_dir).join(name).with_extension("png");
 
     if !path.exists() {
         let img = download_image(&image.link).await?;
@@ -235,7 +235,7 @@ fn save_config(app: &App) -> Result<()> {
     if !app.config_path.exists()
         && let Some(dir) = app.config_path.parent()
     {
-        fs::create_dir_all(dir)?;
+        stdfs::create_dir_all(dir)?;
     }
 
     let mut file = File::create(app.config_path)?;
@@ -251,15 +251,20 @@ fn load_config(path: &Path) -> Result<Config> {
         "save_dir": ""
     }"#;
 
+    if let Some(dir) = path.parent()
+        && !dir.exists()
+    {
+        stdfs::create_dir_all(dir)?;
+    }
+
     if !path.exists() {
         let mut file = File::create(path)?;
         file.write_all(default_config.as_bytes())?;
-        return Ok(serde_json::from_str(default_config)?);
+
+        Ok(serde_json::from_str(default_config)?)
+    } else {
+        Ok(serde_json::from_str(stdfs::read_to_string(path)?.as_str())?)
     }
-
-    let config = serde_json::from_str(fs::read_to_string(path)?.as_str())?;
-
-    Ok(config)
 }
 
 #[tokio::main]
@@ -285,6 +290,8 @@ async fn main() -> Result<()> {
         .collect::<Vec<String>>()[1..];
 
     let mut app = App::new(&config_path, config, args);
+
+    println!("{:?}", args);
 
     menu(&mut app).await?;
 
