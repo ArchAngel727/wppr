@@ -1,0 +1,21 @@
+[package]
+name = "projekt"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+awww = { path = "../awww" }
+matugen = { path = "../matugen" }
+
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+futures.workspace = true
+home.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+scraper.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true

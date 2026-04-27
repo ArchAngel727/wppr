@@ -1,15 +1,15 @@
 mod app;
-mod awww_controller;
 mod cli;
 mod config;
 mod local_image;
 mod online_image;
 
-use crate::awww_controller::AwwwControlle;
 use crate::cli::Cli;
 use crate::config::Config;
 use crate::online_image::OnlineImage;
 use crate::{app::App, local_image::LocalImage};
+
+use awww::AwwwControlle;
 
 use anyhow::{Error, Result, anyhow};
 use chrono::DateTime;
