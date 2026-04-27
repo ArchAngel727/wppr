@@ -2,9 +2,9 @@ use std::{path::Path, process::Command};
 
 use anyhow::Result;
 
-pub struct AwwwControlle {}
+pub struct AwwwController {}
 
-impl AwwwControlle {
+impl AwwwController {
     pub fn is_installed() -> bool {
         Command::new("awww").arg("--version").output().is_ok()
     }

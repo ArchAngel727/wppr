@@ -1,5 +1,5 @@
 [package]
-name = "projekt"
+name = "wppr"
 version.workspace = true
 edition.workspace = true
 

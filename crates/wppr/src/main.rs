@@ -9,12 +9,12 @@ use crate::config::Config;
 use crate::online_image::OnlineImage;
 use crate::{app::App, local_image::LocalImage};
 
-use awww::AwwwControlle;
-
-use anyhow::{Error, Result, anyhow};
+use anyhow::{Result, anyhow};
+use awww::AwwwController;
 use chrono::DateTime;
 use clap::Parser;
 use futures::future::join_all;
+use matugen::MatugenController;
 use regex::Regex;
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
@@ -85,7 +85,7 @@ async fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
     Ok(links)
 }
 
-async fn download_image(url: &str) -> Result<Vec<u8>, Error> {
+async fn download_image(url: &str) -> Result<Vec<u8>> {
     Ok(reqwest::get(url)
         .await?
         .error_for_status()?
@@ -103,7 +103,8 @@ fn reload_wallpaper(app: &App) -> Result<()> {
     }
 
     println!("{}", app.config.current_wallpaper.display());
-    AwwwControlle::set_wallpaper(&app.config.current_wallpaper)?;
+    AwwwController::set_wallpaper(&app.config.current_wallpaper)?;
+    MatugenController::update_colors(&app.config.current_wallpaper)?;
 
     Ok(())
 }
@@ -130,7 +131,7 @@ async fn scrape(app: &mut App<'_>, url: &str, backstep: u32) -> Result<()> {
         .map(|link| process_image(link, &save_dir))
         .collect();
 
-    let mut res: Vec<_> = join_all(futures)
+    let mut res: Vec<LocalImage> = join_all(futures)
         .await
         .into_iter()
         .filter_map(Result::ok)
@@ -141,7 +142,8 @@ async fn scrape(app: &mut App<'_>, url: &str, backstep: u32) -> Result<()> {
     res.iter().for_each(|img| println!("{}", img));
 
     app.config.current_wallpaper = res[0].path.clone();
-    AwwwControlle::set_wallpaper(&app.config.current_wallpaper)?;
+    AwwwController::set_wallpaper(&app.config.current_wallpaper)?;
+    MatugenController::update_colors(&app.config.current_wallpaper)?;
     save_config(app)?;
 
     Ok(())
@@ -261,8 +263,12 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    if !AwwwControlle::is_installed() {
+    if !AwwwController::is_installed() {
         return Err(anyhow!("awww is not installed"));
+    }
+
+    if !MatugenController::is_installed() {
+        return Err(anyhow!("matugen is not installed"));
     }
 
     let config_path = PathBuf::from(if let Some(home) = home::home_dir() {
