@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use chrono::{DateTime, FixedOffset};
 
 #[derive(PartialOrd, PartialEq, Eq)]
@@ -12,5 +14,11 @@ impl OnlineImage {
             link: String::new(),
             date: DateTime::default(),
         }
+    }
+}
+
+impl Display for OnlineImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.link)
     }
 }

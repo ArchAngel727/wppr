@@ -4,6 +4,7 @@ mod config;
 mod config_manager;
 mod local_image;
 mod online_image;
+mod picker;
 mod scraper;
 
 use crate::app::App;
@@ -16,6 +17,7 @@ use awww::AwwwController;
 use clap::Parser;
 use matugen::MatugenController;
 use std::path::PathBuf;
+use tokio::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,6 +42,14 @@ async fn main() -> Result<()> {
 
     let config = ConfigManager::load_config(&config_path)?;
     let mut app = App::new(&config_path, config, cli);
+
+    if !app.config.save_dir.exists()
+        && let Some(home) = home::home_dir()
+    {
+        let dir_path = PathBuf::from(format!("{}/Pictures/wppr", home.display()));
+        fs::create_dir_all(&dir_path).await?;
+        app.config.save_dir = dir_path;
+    }
 
     app.menu().await?;
 

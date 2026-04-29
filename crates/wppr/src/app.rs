@@ -1,9 +1,13 @@
 use anyhow::{Result, anyhow};
 use awww::AwwwController;
+use image::DynamicImage;
 use matugen::MatugenController;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
 
 use crate::cli::Cli;
+use crate::config_manager::ConfigManager;
+use crate::picker::Picker;
 use crate::scraper::Scraper;
 use crate::{Config, cli};
 
@@ -22,6 +26,13 @@ impl<'a> App<'a> {
         }
     }
 
+    pub fn set_wallpaper(&self) -> Result<()> {
+        AwwwController::set_wallpaper(&self.config.current_wallpaper)?;
+        MatugenController::update_colors(&self.config.current_wallpaper)?;
+
+        Ok(())
+    }
+
     pub fn reload_wallpaper(&self) -> Result<()> {
         if !self.config.current_wallpaper.exists() {
             println!("{}", self.config.current_wallpaper.display());
@@ -29,8 +40,7 @@ impl<'a> App<'a> {
         }
 
         println!("{}", self.config.current_wallpaper.display());
-        AwwwController::set_wallpaper(&self.config.current_wallpaper)?;
-        MatugenController::update_colors(&self.config.current_wallpaper)?;
+        self.set_wallpaper()?;
 
         Ok(())
     }
@@ -40,9 +50,13 @@ impl<'a> App<'a> {
 
         match &self.args.command {
             cli::Commands::Reload => self.reload_wallpaper()?,
-            cli::Commands::Pick => todo!("pick"),
-            cli::Commands::Scrape { tag, backstep } => {
+            cli::Commands::Scrape {
+                tag,
+                backstep,
+                pick,
+            } => {
                 let tags = Scraper::scrape_tags().await?;
+                let pick = *pick;
 
                 if let Some(tag) = tag {
                     match tags.iter().find(|t| t.starts_with(tag)) {
@@ -54,7 +68,28 @@ impl<'a> App<'a> {
                     }
                 }
 
-                Scraper::scrape(self, &url, backstep.unwrap_or(0)).await?;
+                let local_images = Scraper::scrape(self, &url, backstep.unwrap_or(0)).await?;
+
+                self.config.current_wallpaper = if pick {
+                    let images_clone = local_images.clone();
+
+                    let images = tokio::task::spawn_blocking(move || {
+                        images_clone
+                            .par_iter()
+                            .map(image::open)
+                            .collect::<Result<Vec<DynamicImage>, _>>()
+                    })
+                    .await??;
+
+                    let picker = Picker::new(&local_images, &images);
+
+                    local_images[picker?.run()?].path.clone()
+                } else {
+                    local_images[0].path.clone()
+                };
+
+                self.set_wallpaper()?;
+                ConfigManager::save_config(self)?;
             }
         };
 

@@ -1,12 +1,8 @@
-use crate::{
-    app::App, config_manager::ConfigManager, local_image::LocalImage, online_image::OnlineImage,
-};
+use crate::{app::App, local_image::LocalImage, online_image::OnlineImage};
 
 use anyhow::{Result, anyhow};
-use awww::AwwwController;
 use chrono::DateTime;
 use futures::future::join_all;
-use matugen::MatugenController;
 use regex::Regex;
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
@@ -103,22 +99,15 @@ impl Scraper {
         Ok(links)
     }
 
-    pub async fn scrape(app: &mut App<'_>, url: &str, backstep: u32) -> Result<()> {
+    pub async fn scrape(app: &mut App<'_>, url: &str, backstep: u32) -> Result<Vec<LocalImage>> {
         if !url.starts_with("http") {
             return Err(anyhow!("Invalid url"));
         }
 
-        if !app.config.save_dir.exists()
-            && let Some(home) = home::home_dir()
-        {
-            let dir_path = PathBuf::from(format!("{}/Pictures/wppr", home.display()));
-            fs::create_dir_all(&dir_path).await?;
-            app.config.save_dir = dir_path;
-        }
-
         let save_dir = app.config.save_dir.clone();
         let page = Scraper::download_page(url).await?;
-        let links = &Scraper::scrape_links(&page).await?[backstep as usize..4];
+        let links =
+            &Scraper::scrape_links(&page).await?[backstep as usize..(4 + backstep) as usize];
 
         let futures: Vec<_> = links
             .iter()
@@ -133,14 +122,7 @@ impl Scraper {
         res.sort_by_key(|k| k.date);
         res.reverse();
 
-        res.iter().for_each(|img| println!("{}", img));
-
-        app.config.current_wallpaper = res[0].path.clone();
-        AwwwController::set_wallpaper(&app.config.current_wallpaper)?;
-        MatugenController::update_colors(&app.config.current_wallpaper)?;
-        ConfigManager::save_config(app)?;
-
-        Ok(())
+        Ok(res)
     }
 
     pub async fn scrape_tags() -> Result<Vec<String>> {

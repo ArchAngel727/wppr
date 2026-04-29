@@ -11,9 +11,10 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     Reload,
-    Pick,
     Scrape {
         tag: Option<String>,
+        #[arg(short, long, value_parser = clap::value_parser!(bool))]
+        pick: bool,
         #[arg(short, long, value_parser = clap::value_parser!(u32).range(1..=3))]
         backstep: Option<u32>,
     },
