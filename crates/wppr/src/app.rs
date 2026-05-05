@@ -12,7 +12,7 @@ use crate::config_manager::ConfigManager;
 use crate::local_image::LocalImage;
 use crate::picker::Picker;
 use crate::scraper::Scraper;
-use crate::{Config, cli, config};
+use crate::{Config, cli};
 
 pub struct App<'a> {
     pub config_path: &'a Path,
@@ -84,10 +84,12 @@ impl<'a> App<'a> {
                 let images = App::load_images(local_images.clone()).await?;
                 let mut picker = Picker::new(&local_images, &images)?;
 
-                self.config.current_wallpaper = local_images[picker.run()?].path.clone();
+                if let Ok(Some(result)) = picker.run() {
+                    self.config.current_wallpaper = local_images[result].path.clone();
 
-                self.set_wallpaper()?;
-                ConfigManager::save_config(self)?;
+                    self.set_wallpaper()?;
+                    ConfigManager::save_config(self)?;
+                }
             }
             cli::Commands::Scrape {
                 tag,
@@ -108,13 +110,11 @@ impl<'a> App<'a> {
                 }
 
                 let local_images = Scraper::scrape(self, &url, backstep.unwrap_or(0)).await?;
+                let images = App::load_images(local_images.clone()).await?;
+                let mut picker = Picker::new(&local_images, &images)?;
 
-                self.config.current_wallpaper = if pick {
-                    let images = App::load_images(local_images.clone()).await?;
-
-                    let picker = Picker::new(&local_images, &images);
-
-                    local_images[picker?.run()?].path.clone()
+                self.config.current_wallpaper = if pick && let Ok(Some(result)) = picker.run() {
+                    local_images[result].path.clone()
                 } else {
                     local_images[0].path.clone()
                 };

@@ -93,7 +93,7 @@ impl<'a, T: Display + AsRef<Path>> Picker<'a, T> {
         area.layout(&layout)
     }
 
-    pub fn run(&mut self) -> Result<usize> {
+    pub fn run(&mut self) -> Result<Option<usize>> {
         for p in &mut self.protocols {
             self.terminal.draw(|frame| {
                 frame.render_widget(Image::new(p), Rect::new(0, 0, 1, 1));
@@ -123,19 +123,14 @@ impl<'a, T: Display + AsRef<Path>> Picker<'a, T> {
 
             if let Some(key) = event::read()?.as_key_press_event() {
                 match key.code {
-                    KeyCode::Char('q') => break,
+                    KeyCode::Char('q') => return Ok(None),
                     KeyCode::Char('j') => self.state.next(),
                     KeyCode::Char('k') => self.state.previous(),
-                    KeyCode::Enter => {
-                        println!("{}", self.state.value);
-                        break;
-                    }
+                    KeyCode::Enter => return Ok(Some(self.state.value)),
                     _ => {}
                 }
             }
         }
-
-        Ok(self.state.value)
     }
 }
 
