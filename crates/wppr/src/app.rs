@@ -113,14 +113,12 @@ impl<'a> App<'a> {
                 let images = App::load_images(local_images.clone()).await?;
                 let mut picker = Picker::new(&local_images, &images)?;
 
-                self.config.current_wallpaper = if pick && let Ok(Some(result)) = picker.run() {
-                    local_images[result].path.clone()
-                } else {
-                    local_images[0].path.clone()
-                };
+                if pick && let Ok(Some(result)) = picker.run() {
+                    self.config.current_wallpaper = local_images[result].path.clone();
 
-                self.set_wallpaper()?;
-                ConfigManager::save_config(self)?;
+                    self.set_wallpaper()?;
+                    ConfigManager::save_config(self)?;
+                }
             }
         };
 
