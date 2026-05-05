@@ -1,17 +1,17 @@
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, Utc};
 use std::{
     fmt,
     path::{Path, PathBuf},
 };
 
-#[derive(PartialOrd, PartialEq, Eq, Clone)]
+#[derive(PartialOrd, PartialEq, Eq, Clone, Debug)]
 pub struct LocalImage {
     pub path: PathBuf,
-    pub date: DateTime<FixedOffset>,
+    pub date: DateTime<Utc>,
 }
 
-impl From<(PathBuf, DateTime<FixedOffset>)> for LocalImage {
-    fn from((path, date): (PathBuf, DateTime<FixedOffset>)) -> Self {
+impl From<(PathBuf, DateTime<Utc>)> for LocalImage {
+    fn from((path, date): (PathBuf, DateTime<Utc>)) -> Self {
         Self { path, date }
     }
 }

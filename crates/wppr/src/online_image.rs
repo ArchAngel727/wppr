@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, Utc};
 
 #[derive(PartialOrd, PartialEq, Eq)]
 pub struct OnlineImage {
     pub link: String,
-    pub date: DateTime<FixedOffset>,
+    pub date: DateTime<Utc>,
 }
 
 impl OnlineImage {

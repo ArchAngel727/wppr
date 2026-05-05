@@ -86,7 +86,7 @@ impl Scraper {
                 .next()
             {
                 match DateTime::parse_from_rfc3339(date_str) {
-                    Ok(date) => image.date = date,
+                    Ok(date) => image.date = date.to_utc(),
                     Err(e) => {
                         return Err(anyhow!("Failed to parse date {e}"));
                     }
