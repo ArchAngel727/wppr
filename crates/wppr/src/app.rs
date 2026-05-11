@@ -33,6 +33,8 @@ impl<'a> App<'a> {
         AwwwController::set_wallpaper(&self.config.current_wallpaper)?;
         MatugenController::update_colors(&self.config.current_wallpaper)?;
 
+        println!("{}", self.config.current_wallpaper.display());
+
         Ok(())
     }
 
@@ -42,7 +44,6 @@ impl<'a> App<'a> {
             return Err(anyhow!("No wallpaper selected"));
         }
 
-        println!("{}", self.config.current_wallpaper.display());
         self.set_wallpaper()?;
 
         Ok(())
@@ -110,15 +111,20 @@ impl<'a> App<'a> {
                 }
 
                 let local_images = Scraper::scrape(self, &url, backstep.unwrap_or(0)).await?;
-                let images = App::load_images(local_images.clone()).await?;
-                let mut picker = Picker::new(&local_images, &images)?;
 
-                if pick && let Ok(Some(result)) = picker.run() {
-                    self.config.current_wallpaper = local_images[result].path.clone();
+                if pick {
+                    let images = App::load_images(local_images.clone()).await?;
+                    let mut picker = Picker::new(&local_images, &images)?;
 
-                    self.set_wallpaper()?;
-                    ConfigManager::save_config(self)?;
+                    if let Ok(Some(result)) = picker.run() {
+                        self.config.current_wallpaper = local_images[result].path.clone();
+                    }
+                } else {
+                    self.config.current_wallpaper = local_images[0].path.clone();
                 }
+
+                self.set_wallpaper()?;
+                ConfigManager::save_config(self)?;
             }
         };
 

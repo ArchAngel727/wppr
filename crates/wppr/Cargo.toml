@@ -29,7 +29,7 @@ reqwest = { version = "0.13.3", default-features = false, features = [
   "json",
   "rustls"
 ] }
-scraper = "0.26.0"
+scraper = "0.27.0"
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.149", default-features = false }
 sha2 = "0.11.0"
