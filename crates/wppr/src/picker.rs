@@ -76,7 +76,7 @@ impl<'a, T: Display + AsRef<Path>> Picker<'a, T> {
 
         let protocols: Vec<Protocol> = images
             .par_iter()
-            .flat_map(|img| picker.new_protocol(img.clone(), right, Resize::Fit(None)))
+            .flat_map(|img| picker.new_protocol(img.clone(), right.into(), Resize::Fit(None)))
             .collect();
 
         Ok(Self {
