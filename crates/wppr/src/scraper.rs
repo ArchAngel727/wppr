@@ -28,8 +28,7 @@ impl Scraper {
             .await?
             .error_for_status()?
             .bytes()
-            .await
-            .unwrap()
+            .await?
             .into_iter()
             .collect())
     }

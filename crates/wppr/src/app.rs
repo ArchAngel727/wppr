@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use awww::AwwwController;
+use awww::{AwwwController, AwwwSocketStatus};
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use matugen::MatugenController;
@@ -30,17 +30,23 @@ impl<'a> App<'a> {
     }
 
     pub fn set_wallpaper(&self) -> Result<()> {
-        AwwwController::set_wallpaper(&self.config.current_wallpaper)?;
-        MatugenController::update_colors(&self.config.current_wallpaper)?;
-
-        println!("{}", self.config.current_wallpaper.display());
+        match AwwwController::check_daemon_status() {
+            AwwwSocketStatus::Running => {
+                AwwwController::set_wallpaper(&self.config.current_wallpaper)?;
+                MatugenController::update_colors(&self.config.current_wallpaper)?;
+            }
+            AwwwSocketStatus::NotRunning => {
+                if let Some(path) = self.config.current_wallpaper.to_str() {
+                    let _ = wallpaper::set_from_path(path);
+                }
+            }
+        }
 
         Ok(())
     }
 
     pub fn reload_wallpaper(&self) -> Result<()> {
         if !self.config.current_wallpaper.exists() {
-            println!("{}", self.config.current_wallpaper.display());
             return Err(anyhow!("No wallpaper selected"));
         }
 

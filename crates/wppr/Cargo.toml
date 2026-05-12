@@ -29,12 +29,12 @@ reqwest = { version = "0.13.3", default-features = false, features = [
   "json",
   "rustls"
 ] }
-scraper = "0.27.0"
+scraper = { version = "0.27.0", default-features = false }
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.149", default-features = false }
-sha2 = "0.11.0"
-thiserror = "2"
-tokio = { version = "1.52.1", features = [
+sha2 = { version = "0.11.0", default-features = false }
+thiserror = { version = "2", default-features = false }
+tokio = { version = "1.52.1", default-features = false, features = [
   "fs",
   "io-util",
   "macros",
@@ -43,3 +43,4 @@ tokio = { version = "1.52.1", features = [
   "sync",
   "time"
 ] }
+wallpaper = { version = "3.2.0", default-features = false }
