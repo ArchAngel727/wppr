@@ -21,13 +21,12 @@ use tokio::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    #[cfg(not(target_os = "linux"))]
-    compile_error!("AW HELL NAH I AINT RUNNING ON {}", target_os);
-
+    #[cfg(target_os = "linux")]
     if !AwwwController::is_installed() {
         return Err(anyhow!("awww is not installed"));
     }
 
+    #[cfg(target_os = "linux")]
     if !MatugenController::is_installed() {
         return Err(anyhow!("matugen is not installed"));
     }
