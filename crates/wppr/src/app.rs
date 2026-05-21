@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use awww::{AwwwController, AwwwSocketStatus};
 use chrono::{DateTime, Utc};
+use hyprpanel::HyprpanelController;
 use image::DynamicImage;
 use matugen::MatugenController;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -40,6 +41,13 @@ impl<'a> App<'a> {
                     let _ = wallpaper::set_from_path(path);
                 }
             }
+        }
+
+        match HyprpanelController::check_daemon_status() {
+            hyprpanel::HyprpanelSocketStatus::Running => {
+                HyprpanelController::set_wallpaper(&self.config.current_wallpaper)?;
+            }
+            hyprpanel::HyprpanelSocketStatus::NotRunning => (),
         }
 
         Ok(())

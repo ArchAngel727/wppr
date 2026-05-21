@@ -13,24 +13,12 @@ use crate::config::Config;
 use crate::config_manager::ConfigManager;
 
 use anyhow::{Result, anyhow};
-use awww::AwwwController;
 use clap::Parser;
-use matugen::MatugenController;
 use std::path::PathBuf;
 use tokio::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    #[cfg(target_os = "linux")]
-    if !AwwwController::is_installed() {
-        return Err(anyhow!("awww is not installed"));
-    }
-
-    #[cfg(target_os = "linux")]
-    if !MatugenController::is_installed() {
-        return Err(anyhow!("matugen is not installed"));
-    }
-
     let cli = Cli::parse();
 
     let config_path = PathBuf::from(if let Some(home) = home::home_dir() {

@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 awww = { path = "../awww" }
+hyprpanel = { path = "../hyprpanel" }
 matugen = { path = "../matugen" }
 
 anyhow.workspace = true
