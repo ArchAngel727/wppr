@@ -13,6 +13,7 @@ use crate::config_manager::ConfigManager;
 use crate::local_image::LocalImage;
 use crate::picker::Picker;
 use crate::scraper::Scraper;
+use crate::ui::Ui;
 use crate::{Config, cli};
 
 pub struct App<'a> {
@@ -92,8 +93,12 @@ impl<'a> App<'a> {
         let mut url = "https://wallpaper-a-day.com".to_string();
 
         match &self.args.command {
-            cli::Commands::Reload => self.reload_wallpaper()?,
-            cli::Commands::Pick => {
+            None => {
+                let mut ui = Ui::new()?;
+                let _ = ui.draw_grid(&self.config.save_dir).await;
+            }
+            Some(cli::Commands::Reload) => self.reload_wallpaper()?,
+            Some(cli::Commands::Pick) => {
                 let mut local_images = self.list_dir()?;
                 local_images.sort_by_key(|k| k.date);
                 let images = App::load_images(local_images.clone()).await?;
@@ -106,11 +111,11 @@ impl<'a> App<'a> {
                     ConfigManager::save_config(self)?;
                 }
             }
-            cli::Commands::Scrape {
+            Some(cli::Commands::Scrape {
                 tag,
                 backstep,
                 pick,
-            } => {
+            }) => {
                 let tags = Scraper::scrape_tags().await?;
                 let pick = *pick;
 

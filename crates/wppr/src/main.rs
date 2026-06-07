@@ -2,10 +2,12 @@ mod app;
 mod cli;
 mod config;
 mod config_manager;
+mod grid;
 mod local_image;
 mod online_image;
 mod picker;
 mod scraper;
+mod ui;
 
 use crate::app::App;
 use crate::cli::Cli;

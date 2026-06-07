@@ -10,38 +10,54 @@ matugen = { path = "../matugen" }
 
 anyhow.workspace = true
 
-chrono = { version = "0.4.44", default-features = false, features = [
-  "clock",
-  "std"
-] }
+async-stream = { version = "0.3.6", default-features = false }
+chrono = {
+  version = "0.4.44",
+  default-features = false,
+  features = ["clock", "std"]
+}
 clap = { version = "4.6.1", features = ["derive"] }
+crossterm = {
+  version = "0.29.0",
+  default-features = false,
+  features = ["event-stream"]
+}
 futures = { version = "0.3.32", default-features = false, features = ["std"] }
 home = "0.5.12"
 image = "0.25.10"
-ratatui = { version = "0.30.0", default-features = false, features = [
-  "crossterm"
-] }
-ratatui-image = { version = "11.0.2", default-features = false, features = [
-  "crossterm"
-] }
+ratatui = {
+  version = "0.30.0",
+  default-features = false,
+  features = ["crossterm"]
+}
+ratatui-image = {
+  version = "11.0.2",
+  default-features = false,
+  features = ["crossterm"]
+}
 rayon = { version = "1.12.0", default-features = false }
 regex = "1.12.3"
-reqwest = { version = "0.13.3", default-features = false, features = [
-  "json",
-  "rustls"
-] }
+reqwest = {
+  version = "0.13.3",
+  default-features = false,
+  features = ["json", "rustls"]
+}
 scraper = { version = "0.27.0", default-features = false }
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.149", default-features = false }
 sha2 = { version = "0.11.0", default-features = false }
 thiserror = { version = "2", default-features = false }
-tokio = { version = "1.52.1", default-features = false, features = [
-  "fs",
-  "io-util",
-  "macros",
-  "net",
-  "rt-multi-thread",
-  "sync",
-  "time"
-] }
+tokio = {
+  version = "1.52.1",
+  default-features = false,
+  features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time"
+  ]
+}
 wallpaper = { version = "3.2.0", default-features = false }

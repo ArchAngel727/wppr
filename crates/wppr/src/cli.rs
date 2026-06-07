@@ -5,7 +5,7 @@ use clap::Subcommand;
 #[command(version, about)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
