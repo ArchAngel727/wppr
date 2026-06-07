@@ -6,8 +6,6 @@ use ratatui::{
 
 pub struct Grid<'a, T> {
     items: &'a [T],
-    columns: usize,
-    rows: usize,
     cell_size: Size,
     highlight_style: Style,
 }
@@ -19,12 +17,10 @@ pub struct GridState {
     selected: Option<usize>,
 }
 
-impl<'a, T> Grid<'a, T> {
+impl<'a, T: std::fmt::Display> Grid<'a, T> {
     pub fn new(items: &'a [T], cell_size: Size) -> Self {
         Self {
             items,
-            columns: 0,
-            rows: 0,
             cell_size,
             highlight_style: Style::default().fg(Color::Black),
         }
@@ -100,22 +96,21 @@ impl GridState {
         self.column_count = count;
     }
 
-    // pub fn move_up(&mut self) {
-    //     if let Some(selected) = self.selected
-    //         && selected > self.column_count - 1
-    //     {
-    //         self.selected = Some(selected - 1);
-    //     }
-    // }
-    //
-    // pub fn move_down(&mut self) {
-    //     if let Some(selected) = self.selected
-    //         && selected % self.column_count + 1 < self.column_count
-    //         && selected + self.column_count < self.item_count
-    //     {
-    //         self.selected = Some(selected + self.column_count);
-    //     }
-    // }
+    pub fn move_up(&mut self) {
+        if let Some(selected) = self.selected
+            && selected >= self.column_count
+        {
+            self.selected = Some(selected - self.column_count);
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if let Some(selected) = self.selected
+            && selected + self.column_count < self.item_count
+        {
+            self.selected = Some(selected + self.column_count);
+        }
+    }
 
     pub fn move_left(&mut self) {
         if let Some(selected) = self.selected

@@ -62,9 +62,12 @@ impl Ui {
 
         loop {
             let _ = self.terminal.draw(|frame| {
-                let grid = Grid::new(&imgs, Size::new(20, 6));
+                let grid_size = Size::new(20, 6);
+                let grid = Grid::new(&imgs, grid_size);
+
                 grid_state.update_item_count(imgs.len());
-                grid_state.update_column_count(4);
+                grid_state.update_column_count((frame.area().width / grid_size.width) as usize);
+
                 frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
             });
 
@@ -75,8 +78,8 @@ impl Ui {
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Char('h') => grid_state.move_left(),
-                                // KeyCode::Char('j') => grid_state.move_down(),
-                                // KeyCode::Char('k') => grid_state.move_up(),
+                                KeyCode::Char('j') => grid_state.move_down(),
+                                KeyCode::Char('k') => grid_state.move_up(),
                                 KeyCode::Char('l') => grid_state.move_right(),
                                 KeyCode::Char('p') => println!("{:?}", grid_state.selected()),
                                 _ => {},
