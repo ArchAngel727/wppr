@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Size},
     style::{Color, Style},
     widgets::{Block, Paragraph, StatefulWidget, Widget},
 };
@@ -8,6 +8,7 @@ pub struct Grid<'a, T> {
     items: &'a [T],
     columns: usize,
     rows: usize,
+    cell_size: Size,
     highlight_style: Style,
 }
 
@@ -19,17 +20,18 @@ pub struct GridState {
 }
 
 impl<'a, T> Grid<'a, T> {
-    pub fn new(items: &'a [T], rows: usize, columns: usize) -> Self {
+    pub fn new(items: &'a [T], cell_size: Size) -> Self {
         Self {
             items,
-            columns,
-            rows,
+            columns: 0,
+            rows: 0,
+            cell_size,
             highlight_style: Style::default().fg(Color::Black),
         }
     }
 }
 
-impl<'a, T: std::fmt::Debug> StatefulWidget for Grid<'a, T> {
+impl<'a, T: std::fmt::Display> StatefulWidget for Grid<'a, T> {
     type State = GridState;
 
     fn render(
@@ -40,10 +42,13 @@ impl<'a, T: std::fmt::Debug> StatefulWidget for Grid<'a, T> {
     ) where
         Self: Sized,
     {
-        let col_constraints = (0..self.columns).map(|_| Constraint::Length(9));
-        let row_constraints = (0..self.rows).map(|_| Constraint::Length(3));
-        let horizontal = Layout::horizontal(col_constraints).spacing(1);
-        let vertical = Layout::vertical(row_constraints).spacing(1);
+        let columns = area.width / self.cell_size.width;
+        let rows = area.height / self.cell_size.height;
+
+        let col_constraints = (0..columns).map(|_| Constraint::Length(self.cell_size.width));
+        let row_constraints = (0..rows).map(|_| Constraint::Length(self.cell_size.height));
+        let horizontal = Layout::horizontal(col_constraints);
+        let vertical = Layout::vertical(row_constraints);
 
         let rows = vertical.split(area);
         let cells: Vec<_> = rows
@@ -62,7 +67,7 @@ impl<'a, T: std::fmt::Debug> StatefulWidget for Grid<'a, T> {
                 Block::bordered()
             };
 
-            Paragraph::new(format!("{:?}", self.items.len()))
+            Paragraph::new(format!("{}", self.items[i]))
                 .block(block)
                 .render(*cell, buf);
         }

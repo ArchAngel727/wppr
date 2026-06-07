@@ -10,6 +10,7 @@ use ratatui::{
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
+    layout::Size,
     prelude::CrosstermBackend,
 };
 use std::{
@@ -61,7 +62,7 @@ impl Ui {
 
         loop {
             let _ = self.terminal.draw(|frame| {
-                let grid = Grid::new(&imgs, 4, 4);
+                let grid = Grid::new(&imgs, Size::new(20, 6));
                 grid_state.update_item_count(imgs.len());
                 grid_state.update_column_count(4);
                 frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
