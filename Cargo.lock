@@ -3377,6 +3377,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "wayle"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3858,6 +3865,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "wallpaper",
+ "wayle",
 ]
 
 [[package]]

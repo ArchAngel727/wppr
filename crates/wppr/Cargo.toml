@@ -5,8 +5,9 @@ edition.workspace = true
 
 [dependencies]
 awww = { path = "../awww" }
-hyprpanel = { path = "../hyprpanel" }
+hyprpanel = { path = "../hyprpanel", optional = true }
 matugen = { path = "../matugen" }
+wayle = { path = "../wayle" }
 
 anyhow.workspace = true
 
@@ -45,3 +46,6 @@ tokio = { version = "1.52.1", default-features = false, features = [
   "time"
 ] }
 wallpaper = { version = "3.2.0", default-features = false }
+
+[features]
+hyprpanel = ["dep:hyprpanel"]
