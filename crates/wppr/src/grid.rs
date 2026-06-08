@@ -1,13 +1,12 @@
-use std::{fs, path::PathBuf};
-
 use ratatui::{
     layout::{Constraint, Layout, Size},
     style::{Color, Style},
-    widgets::{Block, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, StatefulWidget, Widget},
 };
+use ratatui_image::{Resize, StatefulImage, protocol::StatefulProtocol};
 
-pub struct Grid<'a, T> {
-    items: &'a [T],
+pub struct Grid<'a> {
+    items: &'a mut [StatefulProtocol],
     cell_size: Size,
     highlight_style: Style,
 }
@@ -20,17 +19,17 @@ pub struct GridState {
     selected: Option<usize>,
 }
 
-impl<'a, T: std::fmt::Display> Grid<'a, T> {
-    pub fn new(items: &'a [T], cell_size: Size) -> Self {
+impl<'a> Grid<'a> {
+    pub fn new(items: &'a mut [StatefulProtocol], cell_size: Size) -> Self {
         Self {
             items,
             cell_size,
-            highlight_style: Style::default().fg(Color::Black),
+            highlight_style: Style::default().fg(Color::White),
         }
     }
 }
 
-impl<'a, T: std::fmt::Display> StatefulWidget for Grid<'a, T> {
+impl<'a> StatefulWidget for Grid<'a> {
     type State = GridState;
 
     fn render(
@@ -59,26 +58,23 @@ impl<'a, T: std::fmt::Display> StatefulWidget for Grid<'a, T> {
             let index = i + (state.offset * state.column_count);
 
             if index >= self.items.len() {
-                continue;
+                break;
             }
 
             let block = if state.selected == Some(index) {
                 Block::bordered().border_style(self.highlight_style)
             } else {
-                Block::bordered()
+                Block::bordered().border_style(Style::new().fg(Color::Black))
             };
 
-            Paragraph::new(format!(
-                "index: {}\noffset: {}\ncol*off: {}\nselected: {}",
-                // self.items[i + (state.offset * state.row_count)]
-                // i + (state.offset * state.row_count)
-                index,
-                state.offset,
-                state.offset * state.column_count,
-                state.selected.unwrap()
-            ))
-            .block(block)
-            .render(*cell, buf);
+            let inner_area = block.inner(*cell);
+            block.render(*cell, buf);
+
+            StatefulImage::default().resize(Resize::Fit(None)).render(
+                inner_area,
+                buf,
+                &mut self.items[index],
+            );
         }
     }
 }

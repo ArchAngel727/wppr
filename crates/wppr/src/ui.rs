@@ -1,8 +1,8 @@
-use anyhow::Result;
-use async_stream::try_stream;
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream};
-use futures::{Stream, StreamExt, pin_mut};
+use futures::StreamExt;
+use image::{DynamicImage, ImageReader};
 use ratatui::{
     Terminal,
     crossterm::{
@@ -13,11 +13,12 @@ use ratatui::{
     layout::Size,
     prelude::CrosstermBackend,
 };
+use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
 use std::{
     io::{Stdout, stdout},
-    path::Path,
+    path::{Path, PathBuf},
 };
-use tokio::{fs, select};
+use tokio::{fs, select, sync::mpsc};
 
 use crate::{
     grid::{Grid, GridState},
@@ -26,6 +27,7 @@ use crate::{
 
 pub struct Ui {
     terminal: Terminal<CrosstermBackend<Stdout>>,
+    picker: Option<Picker>,
 }
 
 impl Ui {
@@ -34,68 +36,141 @@ impl Ui {
         execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
 
         let terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-        // let terminal_size = terminal.size()?;
-        // let [_, right] =
-        //     Self::split_layout(Rect::new(0, 0, terminal_size.width, terminal_size.height));
+        let picker = Picker::from_query_stdio()?;
 
-        Ok(Self { terminal })
+        Ok(Self {
+            terminal,
+            picker: Some(picker),
+        })
     }
 
-    pub fn load_images(path: &Path) -> impl Stream<Item = Result<LocalImage>> {
-        try_stream! {
-            let mut entries = fs::read_dir(path).await?;
+    pub fn load_images_from_fs(path: PathBuf) -> mpsc::Receiver<LocalImage> {
+        let (tx, rx) = mpsc::channel::<LocalImage>(16);
 
-            while let Some(item) = entries.next_entry().await? {
-                let created_at: DateTime<Utc> = item.metadata().await?.created()?.into();
-                yield LocalImage::from((item.path(), created_at));
+        tokio::spawn(async move {
+            let mut entries = match fs::read_dir(&path).await {
+                Ok(entries) => entries,
+                Err(e) => {
+                    eprintln!("read_dir {}: {}", path.display(), e);
+                    return;
+                }
+            };
+
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let metadata = match entry.metadata().await {
+                    Ok(metadata) => metadata,
+                    _ => continue,
+                };
+
+                let date: DateTime<Utc> = metadata
+                    .modified()
+                    .ok()
+                    .map(DateTime::from)
+                    .unwrap_or(Utc::now());
+
+                let local_image = LocalImage::from((entry.path(), date));
+
+                if tx.send(local_image).await.is_err() {
+                    break;
+                }
             }
-        }
+        });
+
+        rx
+    }
+
+    fn load_images_from_file(
+        mut image_tx: mpsc::Receiver<LocalImage>,
+    ) -> mpsc::Receiver<Result<DynamicImage>> {
+        let (tx, rx) = mpsc::channel::<Result<DynamicImage>>(16);
+
+        tokio::spawn(async move {
+            while let Some(image) = image_tx.recv().await {
+                let tx = tx.clone();
+
+                tokio::task::spawn_blocking(move || {
+                    let result = (|| -> Result<DynamicImage> {
+                        ImageReader::open(&image.path)?
+                            .with_guessed_format()?
+                            .decode()
+                            .map_err(|e| anyhow!("decode {}: {}", image.path.display(), e))
+                    })();
+
+                    let _ = tx.blocking_send(result);
+                });
+            }
+        });
+
+        rx
+    }
+
+    fn create_protocol_from_image(
+        mut image_tx: mpsc::Receiver<Result<DynamicImage>>,
+        picker: Picker,
+    ) -> mpsc::Receiver<Result<StatefulProtocol>> {
+        let (tx, rx) = mpsc::channel::<Result<StatefulProtocol>>(16);
+
+        tokio::spawn(async move {
+            while let Some(image) = image_tx.recv().await {
+                let tx = tx.clone();
+                let picker = picker.clone();
+
+                tokio::task::spawn_blocking(move || {
+                    let result = (|| -> Result<StatefulProtocol> {
+                        let image = image?;
+
+                        Ok(picker.new_resize_protocol(image))
+                    })();
+
+                    let _ = tx.blocking_send(result);
+                });
+            }
+        });
+
+        rx
     }
 
     pub async fn draw_grid(&mut self, path: &Path) -> Result<()> {
-        let stream = Ui::load_images(path);
-        let mut imgs: Vec<LocalImage> = Vec::new();
+        // let cell_size = Size::new(31, 10);
+        let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();
         let mut events = EventStream::new();
+        let mut protocols: Vec<StatefulProtocol> = Vec::new();
 
-        pin_mut!(stream);
+        let local_image_rx = Ui::load_images_from_fs(path.to_path_buf());
+        let dynamic_image_rx = Ui::load_images_from_file(local_image_rx);
+        let mut protocol_rx = Ui::create_protocol_from_image(
+            dynamic_image_rx,
+            self.picker.take().expect("Picker already taken"),
+        );
 
         loop {
             let _ = self.terminal.draw(|frame| {
-                let grid_size = Size::new(20, 6);
-                let grid = Grid::new(&imgs, grid_size);
+                let protocol_count = protocols.len();
+                let grid = Grid::new(&mut protocols, cell_size);
 
-                grid_state.update_item_count(imgs.len());
-                grid_state.update_size(&frame.area().as_size(), &grid_size);
+                grid_state.update_item_count(protocol_count);
+                grid_state.update_size(&frame.area().as_size(), &cell_size);
 
                 frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
             });
 
             select! {
-                maybe_event = events.next() => {
-                    match maybe_event {
-                        Some(Ok(Event::Key(key))) => {
-                            match key.code {
-                                KeyCode::Char('q') => break,
-                                KeyCode::Char('h') => grid_state.move_left(),
-                                KeyCode::Char('j') => grid_state.move_down(),
-                                KeyCode::Char('k') => grid_state.move_up(),
-                                KeyCode::Char('l') => grid_state.move_right(),
-                                _ => {},
-                            }
-                        },
-                        Some(Ok(_)) => {},
-                        Some(Err(_)) => {},
-                        None => {},
+                Some(maybe_event) = events.next() => {
+                    if let Ok(Event::Key(key)) = maybe_event {
+                        match key.code {
+                            KeyCode::Char('q') => break,
+                            KeyCode::Char('h') => grid_state.move_left(),
+                            KeyCode::Char('j') => grid_state.move_down(),
+                            KeyCode::Char('k') => grid_state.move_up(),
+                            KeyCode::Char('l') => grid_state.move_right(),
+                            _ => {},
+                        }
                     }
                 }
 
-                maybe_img = stream.next() => {
-                    match maybe_img {
-                        Some(Ok(img)) => imgs.push(img),
-                        Some(Err(_)) => {},
-                        None => {}
-                    }
+                Some(maybe_protocol) = protocol_rx.recv() => {
+                    if let Ok(protocol) = maybe_protocol { protocols.push(protocol) }
                 }
             }
         }
