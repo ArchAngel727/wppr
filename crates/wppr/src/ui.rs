@@ -130,7 +130,8 @@ impl Ui {
         rx
     }
 
-    pub async fn draw_grid(&mut self, path: &Path) -> Result<()> {
+    pub async fn draw_grid(&mut self, path: &Path) -> Option<usize> {
+        // TODO: Load cell_size from config file
         // let cell_size = Size::new(31, 10);
         let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();
@@ -159,11 +160,12 @@ impl Ui {
                 Some(maybe_event) = events.next() => {
                     if let Ok(Event::Key(key)) = maybe_event {
                         match key.code {
-                            KeyCode::Char('q') => break,
+                            KeyCode::Char('q') => return None,
                             KeyCode::Char('h') => grid_state.move_left(),
                             KeyCode::Char('j') => grid_state.move_down(),
                             KeyCode::Char('k') => grid_state.move_up(),
                             KeyCode::Char('l') => grid_state.move_right(),
+                            KeyCode::Enter => return grid_state.selected(),
                             _ => {},
                         }
                     }
@@ -174,8 +176,6 @@ impl Ui {
                 }
             }
         }
-
-        Ok(())
     }
 }
 

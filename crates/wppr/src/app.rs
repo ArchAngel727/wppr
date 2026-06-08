@@ -95,7 +95,11 @@ impl<'a> App<'a> {
         match &self.args.command {
             None => {
                 let mut ui = Ui::new()?;
-                let _ = ui.draw_grid(&self.config.save_dir).await;
+                let pick = ui.draw_grid(&self.config.save_dir).await;
+
+                drop(ui);
+
+                println!("{:?}", pick);
             }
             Some(cli::Commands::Reload) => self.reload_wallpaper()?,
             Some(cli::Commands::Pick) => {

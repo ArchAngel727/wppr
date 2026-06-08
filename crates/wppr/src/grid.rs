@@ -90,6 +90,10 @@ impl GridState {
         }
     }
 
+    pub fn selected(&self) -> Option<usize> {
+        self.selected
+    }
+
     pub fn update_item_count(&mut self, count: usize) {
         self.item_count = count;
     }
