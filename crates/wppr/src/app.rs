@@ -1,12 +1,15 @@
 use anyhow::{Result, anyhow};
 use awww::{AwwwController, AwwwSocketStatus};
 use chrono::{DateTime, Utc};
-use hyprpanel::HyprpanelController;
 use image::DynamicImage;
 use matugen::MatugenController;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
 use std::path::Path;
+use wayle::WayleController;
+
+#[cfg(feature = "hyprpanel")]
+use hyprpanel::{HyprpanelController, HyprpanelSocketStatus};
 
 use crate::cli::Cli;
 use crate::config_manager::ConfigManager;
@@ -44,11 +47,16 @@ impl<'a> App<'a> {
             }
         }
 
+        #[cfg(feature = "hyprpanel")]
         match HyprpanelController::check_daemon_status() {
-            hyprpanel::HyprpanelSocketStatus::Running => {
+            HyprpanelSocketStatus::Running => {
                 HyprpanelController::set_wallpaper(&self.config.current_wallpaper)?;
             }
-            hyprpanel::HyprpanelSocketStatus::NotRunning => (),
+            HyprpanelSocketStatus::NotRunning => {}
+        }
+
+        if WayleController::is_running() {
+            WayleController::set_wallpaper(&self.config.current_wallpaper)?;
         }
 
         Ok(())
