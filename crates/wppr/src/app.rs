@@ -87,7 +87,10 @@ impl<'a> App<'a> {
                     url.push_str("/category/");
                     url.push_str(tag);
                 }
-                None => todo!(),
+                None => {
+                    error!("Tag not found");
+                    todo!();
+                }
             }
         }
 

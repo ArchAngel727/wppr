@@ -167,10 +167,10 @@ impl<'a> Ui<'a> {
                     if let Ok(Event::Key(key)) = maybe_event {
                         match key.code {
                             KeyCode::Char('q') => return None,
-                            KeyCode::Char('h') => grid_state.move_left(),
-                            KeyCode::Char('j') => grid_state.move_down(),
-                            KeyCode::Char('k') => grid_state.move_up(),
-                            KeyCode::Char('l') => grid_state.move_right(),
+                            KeyCode::Char('h') | KeyCode::Left => grid_state.move_left(),
+                            KeyCode::Char('j') | KeyCode::Down => grid_state.move_down(),
+                            KeyCode::Char('k') | KeyCode::Up => grid_state.move_up(),
+                            KeyCode::Char('l') | KeyCode::Right => grid_state.move_right(),
                             KeyCode::Enter => {
                                     if let Some(index) = grid_state.selected() {
                                         return Some(images.local_images[index].clone());

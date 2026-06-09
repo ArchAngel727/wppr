@@ -17,6 +17,7 @@ use anyhow::{Result, anyhow};
 use clap::Parser;
 use std::path::PathBuf;
 use tokio::fs;
+use tracing::error;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -35,12 +36,15 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let config_path = PathBuf::from(if let Some(home) = home::home_dir() {
-        format!("{}/.config/wppr/config.json", home.display())
+    let home_dir = if let Some(home) = home::home_dir() {
+        home
     } else {
-        return Err(anyhow!("Could not find home dir"));
-    });
+        let e = anyhow!("{}", "Could not find home dir");
+        error!("{}", e);
+        return Err(e);
+    };
 
+    let config_path = PathBuf::from(format!("{}/.config/wppr/config.json", home_dir.display()));
     let config = ConfigManager::load_config(&config_path)?;
     let mut app = App::new(&config_path, config, cli);
 
@@ -52,7 +56,13 @@ async fn main() -> Result<()> {
         app.config.save_dir = dir_path;
     }
 
-    app.menu().await?;
+    match app.menu().await {
+        Ok(()) => {}
+        Err(e) => {
+            error!("{}", e);
+            return Err(e);
+        }
+    }
 
     Ok(())
 }
