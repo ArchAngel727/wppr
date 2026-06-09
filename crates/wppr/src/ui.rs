@@ -1,4 +1,5 @@
 pub mod grid;
+pub mod packet;
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
@@ -19,10 +20,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
-use std::{
-    io::{Stdout, stdout},
-    path::PathBuf,
-};
+use std::io::{Stdout, stdout};
 use tokio::{fs, select, sync::mpsc};
 use tracing::error;
 
@@ -31,28 +29,8 @@ use crate::{
     image_buffer::ImageBuffer,
     local_image::LocalImage,
     ui::grid::{Grid, GridState},
+    ui::packet::Packet,
 };
-
-pub struct Packet {
-    path: Option<PathBuf>,
-    local_images: Option<Vec<LocalImage>>,
-}
-
-impl Packet {
-    pub fn from_path(path: PathBuf) -> Self {
-        Packet {
-            path: Some(path),
-            local_images: None,
-        }
-    }
-
-    pub fn from_img_vec(vec: Vec<LocalImage>) -> Self {
-        Self {
-            path: None,
-            local_images: Some(vec),
-        }
-    }
-}
 
 pub struct Ui<'a> {
     config: &'a Config,

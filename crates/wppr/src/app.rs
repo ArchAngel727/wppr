@@ -9,7 +9,7 @@ use crate::cli::Cli;
 use crate::config_manager::ConfigManager;
 use crate::local_image::LocalImage;
 use crate::scraper::Scraper;
-use crate::ui::{Packet, Ui};
+use crate::ui::{Ui, packet::Packet};
 use crate::{Config, cli};
 
 pub struct App<'a> {
