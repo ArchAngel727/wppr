@@ -22,6 +22,7 @@ use tokio::{fs, select, sync::mpsc};
 
 use crate::{
     grid::{Grid, GridState},
+    image_buffer::ImageBuffer,
     local_image::LocalImage,
 };
 
@@ -81,8 +82,8 @@ impl Ui {
 
     fn load_images_from_file(
         mut image_tx: mpsc::Receiver<LocalImage>,
-    ) -> mpsc::Receiver<Result<DynamicImage>> {
-        let (tx, rx) = mpsc::channel::<Result<DynamicImage>>(16);
+    ) -> mpsc::Receiver<(Result<DynamicImage>, DateTime<Utc>)> {
+        let (tx, rx) = mpsc::channel::<(Result<DynamicImage>, DateTime<Utc>)>(16);
 
         tokio::spawn(async move {
             while let Some(image) = image_tx.recv().await {
@@ -96,7 +97,7 @@ impl Ui {
                             .map_err(|e| anyhow!("decode {}: {}", image.path.display(), e))
                     })();
 
-                    let _ = tx.blocking_send(result);
+                    let _ = tx.blocking_send((result, image.date));
                 });
             }
         });
@@ -105,10 +106,10 @@ impl Ui {
     }
 
     fn create_protocol_from_image(
-        mut image_tx: mpsc::Receiver<Result<DynamicImage>>,
+        mut image_tx: mpsc::Receiver<(Result<DynamicImage>, DateTime<Utc>)>,
         picker: Picker,
-    ) -> mpsc::Receiver<Result<StatefulProtocol>> {
-        let (tx, rx) = mpsc::channel::<Result<StatefulProtocol>>(16);
+    ) -> mpsc::Receiver<(Result<StatefulProtocol>, DateTime<Utc>)> {
+        let (tx, rx) = mpsc::channel::<(Result<StatefulProtocol>, DateTime<Utc>)>(16);
 
         tokio::spawn(async move {
             while let Some(image) = image_tx.recv().await {
@@ -117,12 +118,12 @@ impl Ui {
 
                 tokio::task::spawn_blocking(move || {
                     let result = (|| -> Result<StatefulProtocol> {
-                        let image = image?;
+                        let image = image.0?;
 
                         Ok(picker.new_resize_protocol(image))
                     })();
 
-                    let _ = tx.blocking_send(result);
+                    let _ = tx.blocking_send((result, image.1));
                 });
             }
         });
@@ -136,7 +137,7 @@ impl Ui {
         let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();
         let mut events = EventStream::new();
-        let mut protocols: Vec<StatefulProtocol> = Vec::new();
+        let mut images = ImageBuffer::new();
 
         let local_image_rx = Ui::load_images_from_fs(path.to_path_buf());
         let dynamic_image_rx = Ui::load_images_from_file(local_image_rx);
@@ -147,8 +148,8 @@ impl Ui {
 
         loop {
             let _ = self.terminal.draw(|frame| {
-                let protocol_count = protocols.len();
-                let grid = Grid::new(&mut protocols, cell_size);
+                let protocol_count = images.len();
+                let grid = Grid::new(&mut images.protocols, cell_size);
 
                 grid_state.update_item_count(protocol_count);
                 grid_state.update_size(&frame.area().as_size(), &cell_size);
@@ -171,8 +172,12 @@ impl Ui {
                     }
                 }
 
-                Some(maybe_protocol) = protocol_rx.recv() => {
-                    if let Ok(protocol) = maybe_protocol { protocols.push(protocol) }
+                Some((protocol, date_time)) = protocol_rx.recv() => {
+                    if let Ok(protocol) = protocol {
+                        images.protocols.push(protocol);
+                        images.timestamps.push(date_time);
+                        images.sort_by_timestamp();
+                    }
                 }
             }
         }
