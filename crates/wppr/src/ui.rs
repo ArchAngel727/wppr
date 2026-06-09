@@ -1,6 +1,8 @@
+pub mod grid;
+
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
-use crossterm::event::{Event, EventStream};
+use crossterm::event::{self, Event, EventStream};
 use futures::StreamExt;
 use image::{DynamicImage, ImageReader};
 use ratatui::{
@@ -10,29 +12,36 @@ use ratatui::{
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    layout::Size,
+    layout::{Alignment, Constraint, Direction, Flex, Layout, Rect, Size},
     prelude::CrosstermBackend,
+    style::{Color, Style, Stylize},
+    text::Line,
+    widgets::{Block, Borders, Paragraph},
 };
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
 use std::{
     io::{Stdout, stdout},
-    path::{Path, PathBuf},
+    path::PathBuf,
+    time::Duration,
 };
 use tokio::{fs, select, sync::mpsc};
+use tracing::error;
 
 use crate::{
-    grid::{Grid, GridState},
+    config::Config,
     image_buffer::ImageBuffer,
     local_image::LocalImage,
+    ui::grid::{Grid, GridState},
 };
 
-pub struct Ui {
+pub struct Ui<'a> {
+    config: &'a Config,
     terminal: Terminal<CrosstermBackend<Stdout>>,
     picker: Option<Picker>,
 }
 
-impl Ui {
-    pub fn new() -> Result<Self> {
+impl<'a> Ui<'a> {
+    pub fn new(config: &'a Config) -> Result<Self> {
         enable_raw_mode()?;
         execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
 
@@ -40,12 +49,144 @@ impl Ui {
         let picker = Picker::from_query_stdio()?;
 
         Ok(Self {
+            config,
             terminal,
             picker: Some(picker),
         })
     }
 
-    pub fn load_images_from_fs(path: PathBuf) -> mpsc::Receiver<LocalImage> {
+    pub fn start_menu(&mut self) -> Result<Option<usize>> {
+        let mut selected: usize = 0;
+
+        loop {
+            let _ = self.terminal.draw(|frame| {
+                let outer_layout = Layout::vertical(vec![
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                ])
+                .flex(Flex::Center)
+                .split(frame.area());
+
+                let inner_layout = Layout::horizontal(vec![
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ])
+                .split(outer_layout[1]);
+
+                let (left_color, right_color) = if selected == 0 {
+                    (Color::White, Color::Black)
+                } else {
+                    (Color::Black, Color::White)
+                };
+
+                let top_bar = Block::new()
+                    .title(Line::from(" Wppr ").centered())
+                    .borders(Borders::TOP);
+                let bottom_bar = Block::new().borders(Borders::TOP);
+
+                let left_block = Paragraph::new("Local Images")
+                    .block(Block::bordered().border_style(left_color))
+                    .centered();
+                let right_block = Paragraph::new("Scrape Images")
+                    .block(Block::bordered().border_style(right_color))
+                    .centered();
+
+                let left = Ui::center_rect(inner_layout[0], 18, 7);
+                let right = Ui::center_rect(inner_layout[1], 18, 7);
+
+                frame.render_widget(top_bar, outer_layout[0]);
+                frame.render_widget(bottom_bar, outer_layout[2]);
+
+                frame.render_widget(left_block, left);
+                frame.render_widget(right_block, right);
+            });
+
+            if let Event::Key(key) = event::read()? {
+                match key.code {
+                    KeyCode::Char('q') => break Ok(None),
+                    KeyCode::Char('h') | KeyCode::Left => selected = 0,
+                    KeyCode::Char('l') | KeyCode::Right => selected = 1,
+                    KeyCode::Tab => selected = (selected + 1) % 2,
+                    KeyCode::Enter => break Ok(Some(selected)),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    fn center_rect(area: Rect, width: u16, height: u16) -> Rect {
+        let vertical = Layout::vertical(vec![Constraint::Length(height)])
+            .flex(Flex::Center)
+            .split(area);
+
+        Layout::horizontal(vec![Constraint::Length(width)])
+            .flex(Flex::Center)
+            .split(vertical[0])[0]
+    }
+
+    pub async fn draw_grid(&mut self) -> Option<LocalImage> {
+        // TODO: Load cell_size from config file
+        // let cell_size = Size::new(31, 10);
+        // switch to tracing for logging
+        let cell_size = Size::new(20, 7);
+        let mut grid_state = GridState::new();
+        let mut events = EventStream::new();
+        let mut images = ImageBuffer::new();
+
+        let local_image_rx = Ui::load_images_from_fs(self.config.save_dir.clone());
+        let dynamic_image_rx = Ui::load_images_from_file(local_image_rx);
+        let mut protocol_rx = Ui::create_protocol_from_image(
+            dynamic_image_rx,
+            self.picker.take().expect("Picker already taken"),
+        );
+
+        loop {
+            let _ = self.terminal.draw(|frame| {
+                let protocol_count = images.len();
+                let grid = Grid::new(&mut images.protocols, cell_size);
+
+                grid_state.update_item_count(protocol_count);
+                grid_state.update_size(&frame.area().as_size(), &cell_size);
+
+                frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
+            });
+
+            select! {
+                Some(maybe_event) = events.next() => {
+                    if let Ok(Event::Key(key)) = maybe_event {
+                        match key.code {
+                            KeyCode::Char('q') => return None,
+                            KeyCode::Char('h') => grid_state.move_left(),
+                            KeyCode::Char('j') => grid_state.move_down(),
+                            KeyCode::Char('k') => grid_state.move_up(),
+                            KeyCode::Char('l') => grid_state.move_right(),
+                            KeyCode::Enter => {
+                                    if let Some(index) = grid_state.selected() {
+                                        return Some(images.local_images[index].clone());
+                                    } else {
+                                        return None;
+                                    }
+                                },
+                            _ => {},
+                        }
+                    }
+                }
+
+                Some((protocol, local_image)) = protocol_rx.recv() => {
+                    if let Ok(protocol) = protocol {
+                        images.protocols.push(protocol);
+                        images.local_images.push(local_image);
+                        images.sort_by_timestamp();
+                    } else {
+                        error!("Failed to load image: {}", local_image.path.display());
+                    }
+                }
+            }
+        }
+    }
+
+    fn load_images_from_fs(path: PathBuf) -> mpsc::Receiver<LocalImage> {
         let (tx, rx) = mpsc::channel::<LocalImage>(16);
 
         tokio::spawn(async move {
@@ -130,67 +271,9 @@ impl Ui {
 
         rx
     }
-
-    pub async fn draw_grid(&mut self, path: &Path) -> Option<LocalImage> {
-        // TODO: Load cell_size from config file
-        // let cell_size = Size::new(31, 10);
-        let cell_size = Size::new(20, 7);
-        let mut grid_state = GridState::new();
-        let mut events = EventStream::new();
-        let mut images = ImageBuffer::new();
-
-        let local_image_rx = Ui::load_images_from_fs(path.to_path_buf());
-        let dynamic_image_rx = Ui::load_images_from_file(local_image_rx);
-        let mut protocol_rx = Ui::create_protocol_from_image(
-            dynamic_image_rx,
-            self.picker.take().expect("Picker already taken"),
-        );
-
-        loop {
-            let _ = self.terminal.draw(|frame| {
-                let protocol_count = images.len();
-                let grid = Grid::new(&mut images.protocols, cell_size);
-
-                grid_state.update_item_count(protocol_count);
-                grid_state.update_size(&frame.area().as_size(), &cell_size);
-
-                frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
-            });
-
-            select! {
-                Some(maybe_event) = events.next() => {
-                    if let Ok(Event::Key(key)) = maybe_event {
-                        match key.code {
-                            KeyCode::Char('q') => return None,
-                            KeyCode::Char('h') => grid_state.move_left(),
-                            KeyCode::Char('j') => grid_state.move_down(),
-                            KeyCode::Char('k') => grid_state.move_up(),
-                            KeyCode::Char('l') => grid_state.move_right(),
-                            KeyCode::Enter => {
-                                    if let Some(index) = grid_state.selected() {
-                                        return Some(images.local_images[index].clone());
-                                    } else {
-                                        return None;
-                                    }
-                                },
-                            _ => {},
-                        }
-                    }
-                }
-
-                Some((protocol, local_image)) = protocol_rx.recv() => {
-                    if let Ok(protocol) = protocol {
-                        images.protocols.push(protocol);
-                        images.local_images.push(local_image);
-                        images.sort_by_timestamp();
-                    }
-                }
-            }
-        }
-    }
 }
 
-impl Drop for Ui {
+impl<'a> Drop for Ui<'a> {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
         let _ = execute!(

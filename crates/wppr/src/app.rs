@@ -5,8 +5,7 @@ use hyprpanel::HyprpanelController;
 use image::DynamicImage;
 use matugen::MatugenController;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use crate::cli::Cli;
 use crate::config_manager::ConfigManager;
@@ -94,15 +93,22 @@ impl<'a> App<'a> {
 
         match &self.args.command {
             None => {
-                let mut ui = Ui::new()?;
-                let pick = ui.draw_grid(&self.config.save_dir).await;
+                let mut ui = Ui::new(&self.config)?;
+                // let pick = ui.draw_grid().await;
+                let selected = ui.start_menu();
 
                 drop(ui);
 
-                if let Some(pick) = pick {
-                    self.config.current_wallpaper = pick.path.clone();
-                    self.set_wallpaper()?;
+                match selected {
+                    Ok(Some(selected)) => println!("Selected: {}", selected),
+                    Ok(None) => println!("Nothing selected"),
+                    Err(e) => eprintln!("{}", e),
                 }
+
+                // if let Some(pick) = pick {
+                //     self.config.current_wallpaper = pick.path.clone();
+                //     self.set_wallpaper()?;
+                // }
             }
             Some(cli::Commands::Reload) => self.reload_wallpaper()?,
             Some(cli::Commands::Pick) => {

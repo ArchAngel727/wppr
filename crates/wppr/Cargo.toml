@@ -9,6 +9,7 @@ hyprpanel = { path = "../hyprpanel" }
 matugen = { path = "../matugen" }
 
 anyhow.workspace = true
+tracing.workspace = true
 
 async-stream = { version = "0.3.6", default-features = false }
 chrono = {

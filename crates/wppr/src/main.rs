@@ -2,7 +2,6 @@ mod app;
 mod cli;
 mod config;
 mod config_manager;
-mod grid;
 mod image_buffer;
 mod local_image;
 mod online_image;
