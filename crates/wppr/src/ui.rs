@@ -134,6 +134,9 @@ impl Ui {
     pub async fn draw_grid(&mut self, path: &Path) -> Option<usize> {
         // TODO: Load cell_size from config file
         // let cell_size = Size::new(31, 10);
+        // rewrite the thread chain to build up a ImageBufferItem instead of using pairs
+        // add storing the path of an image to the ImageBuffer
+        // return the path of the selected image instead of the selected index
         let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();
         let mut events = EventStream::new();
