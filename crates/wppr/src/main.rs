@@ -23,6 +23,7 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // TODO: add seperate configs for debug and release
     let file_appender = tracing_appender::rolling::daily("logs", "wppr");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 

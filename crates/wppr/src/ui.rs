@@ -38,6 +38,11 @@ pub struct Ui<'a> {
     picker: Option<Picker>,
 }
 
+pub enum StartMenuSelection {
+    LocalImages,
+    ScrapeImages,
+}
+
 impl<'a> Ui<'a> {
     pub fn new(config: &'a Config) -> Result<Self> {
         enable_raw_mode()?;
@@ -53,7 +58,7 @@ impl<'a> Ui<'a> {
         })
     }
 
-    pub fn start_menu(&mut self) -> Result<Option<usize>> {
+    pub fn start_menu(&mut self) -> Result<Option<StartMenuSelection>> {
         let mut selected: usize = 0;
 
         loop {
@@ -106,7 +111,12 @@ impl<'a> Ui<'a> {
                     KeyCode::Char('h') | KeyCode::Left => selected = 0,
                     KeyCode::Char('l') | KeyCode::Right => selected = 1,
                     KeyCode::Tab => selected = (selected + 1) % 2,
-                    KeyCode::Enter => break Ok(Some(selected)),
+                    KeyCode::Enter => {
+                        break Ok(Some(match selected {
+                            0 => StartMenuSelection::LocalImages,
+                            _ => StartMenuSelection::ScrapeImages,
+                        }));
+                    }
                     _ => {}
                 }
             }
@@ -123,10 +133,9 @@ impl<'a> Ui<'a> {
             .split(vertical[0])[0]
     }
 
-    pub async fn draw_grid(&mut self, packet: Option<Packet>) -> Option<LocalImage> {
+    pub async fn picker_grid(&mut self, packet: Option<Packet>) -> Option<LocalImage> {
         // TODO: Load cell_size from config file
         // let cell_size = Size::new(31, 10);
-        // switch to tracing for logging
         let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();
         let mut events = EventStream::new();

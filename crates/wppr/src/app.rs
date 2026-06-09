@@ -9,6 +9,7 @@ use crate::cli::Cli;
 use crate::config_manager::ConfigManager;
 use crate::local_image::LocalImage;
 use crate::scraper::Scraper;
+use crate::ui::StartMenuSelection;
 use crate::ui::{Ui, packet::Packet};
 use crate::{Config, cli};
 
@@ -102,21 +103,31 @@ impl<'a> App<'a> {
                 let selected = ui.start_menu();
 
                 match selected {
-                    Ok(Some(selected)) => {
-                        if selected == 0 {
-                            let image = ui.draw_grid(None).await;
+                    Ok(Some(selected)) => match selected {
+                        StartMenuSelection::LocalImages => {
+                            let image = ui.picker_grid(None).await;
                             drop(ui);
 
                             self.match_image(&image)?;
                         }
-                    }
+                        StartMenuSelection::ScrapeImages => {
+                            let scraped_local_images =
+                                self.scrape_loacl_images(&None, &mut url, &None).await?;
+
+                            let packet = Packet::from_img_vec(scraped_local_images);
+                            let image = ui.picker_grid(Some(packet)).await;
+                            drop(ui);
+
+                            self.match_image(&image)?;
+                        }
+                    },
                     Ok(None) => info!("Nothing selected"),
                     Err(e) => error!("{}", e),
                 }
             }
             Some(cli::Commands::Reload) => self.reload_wallpaper()?,
             Some(cli::Commands::Pick) => {
-                let image = ui.draw_grid(None).await;
+                let image = ui.picker_grid(None).await;
                 drop(ui);
 
                 self.match_image(&image)?;
@@ -131,7 +142,7 @@ impl<'a> App<'a> {
 
                 if *pick {
                     let packet = Packet::from_img_vec(scraped_local_images);
-                    let image = ui.draw_grid(Some(packet)).await;
+                    let image = ui.picker_grid(Some(packet)).await;
                     drop(ui);
 
                     self.match_image(&image)?;
