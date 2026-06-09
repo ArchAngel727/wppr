@@ -99,7 +99,10 @@ impl<'a> App<'a> {
 
                 drop(ui);
 
-                println!("{:?}", pick);
+                if let Some(pick) = pick {
+                    self.config.current_wallpaper = pick.path.clone();
+                    self.set_wallpaper()?;
+                }
             }
             Some(cli::Commands::Reload) => self.reload_wallpaper()?,
             Some(cli::Commands::Pick) => {

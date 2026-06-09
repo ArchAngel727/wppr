@@ -1,21 +1,22 @@
-use chrono::{DateTime, Utc};
 use ratatui_image::protocol::StatefulProtocol;
+
+use crate::local_image::LocalImage;
 
 pub struct ImageBuffer {
     pub protocols: Vec<StatefulProtocol>,
-    pub timestamps: Vec<DateTime<Utc>>,
+    pub local_images: Vec<LocalImage>,
 }
 
 impl ImageBuffer {
     pub fn new() -> Self {
         Self {
             protocols: Vec::new(),
-            timestamps: Vec::new(),
+            local_images: Vec::new(),
         }
     }
 
     pub fn len(&self) -> usize {
-        if self.protocols.len() == self.timestamps.len() {
+        if self.protocols.len() == self.local_images.len() {
             self.protocols.len()
         } else {
             0
@@ -23,17 +24,17 @@ impl ImageBuffer {
     }
 
     pub fn sort_by_timestamp(&mut self) {
-        let mut pairs: Vec<_> = self
+        let mut pair: Vec<_> = self
             .protocols
             .drain(..)
-            .zip(self.timestamps.drain(..))
+            .zip(self.local_images.drain(..))
             .collect();
 
-        pairs.sort_by_key(|(_, timestamp)| *timestamp);
+        pair.sort_by_key(|(_, local_image)| local_image.date);
 
-        for (protocol, timestamp) in pairs {
+        for (protocol, local_image) in pair {
             self.protocols.push(protocol);
-            self.timestamps.push(timestamp);
+            self.local_images.push(local_image);
         }
     }
 }

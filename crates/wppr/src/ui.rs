@@ -82,8 +82,8 @@ impl Ui {
 
     fn load_images_from_file(
         mut image_tx: mpsc::Receiver<LocalImage>,
-    ) -> mpsc::Receiver<(Result<DynamicImage>, DateTime<Utc>)> {
-        let (tx, rx) = mpsc::channel::<(Result<DynamicImage>, DateTime<Utc>)>(16);
+    ) -> mpsc::Receiver<(Result<DynamicImage>, LocalImage)> {
+        let (tx, rx) = mpsc::channel::<(Result<DynamicImage>, LocalImage)>(16);
 
         tokio::spawn(async move {
             while let Some(image) = image_tx.recv().await {
@@ -97,7 +97,7 @@ impl Ui {
                             .map_err(|e| anyhow!("decode {}: {}", image.path.display(), e))
                     })();
 
-                    let _ = tx.blocking_send((result, image.date));
+                    let _ = tx.blocking_send((result, image));
                 });
             }
         });
@@ -106,10 +106,10 @@ impl Ui {
     }
 
     fn create_protocol_from_image(
-        mut image_tx: mpsc::Receiver<(Result<DynamicImage>, DateTime<Utc>)>,
+        mut image_tx: mpsc::Receiver<(Result<DynamicImage>, LocalImage)>,
         picker: Picker,
-    ) -> mpsc::Receiver<(Result<StatefulProtocol>, DateTime<Utc>)> {
-        let (tx, rx) = mpsc::channel::<(Result<StatefulProtocol>, DateTime<Utc>)>(16);
+    ) -> mpsc::Receiver<(Result<StatefulProtocol>, LocalImage)> {
+        let (tx, rx) = mpsc::channel::<(Result<StatefulProtocol>, LocalImage)>(16);
 
         tokio::spawn(async move {
             while let Some(image) = image_tx.recv().await {
@@ -131,12 +131,9 @@ impl Ui {
         rx
     }
 
-    pub async fn draw_grid(&mut self, path: &Path) -> Option<usize> {
+    pub async fn draw_grid(&mut self, path: &Path) -> Option<LocalImage> {
         // TODO: Load cell_size from config file
         // let cell_size = Size::new(31, 10);
-        // rewrite the thread chain to build up a ImageBufferItem instead of using pairs
-        // add storing the path of an image to the ImageBuffer
-        // return the path of the selected image instead of the selected index
         let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();
         let mut events = EventStream::new();
@@ -169,16 +166,22 @@ impl Ui {
                             KeyCode::Char('j') => grid_state.move_down(),
                             KeyCode::Char('k') => grid_state.move_up(),
                             KeyCode::Char('l') => grid_state.move_right(),
-                            KeyCode::Enter => return grid_state.selected(),
+                            KeyCode::Enter => {
+                                    if let Some(index) = grid_state.selected() {
+                                        return Some(images.local_images[index].clone());
+                                    } else {
+                                        return None;
+                                    }
+                                },
                             _ => {},
                         }
                     }
                 }
 
-                Some((protocol, date_time)) = protocol_rx.recv() => {
+                Some((protocol, local_image)) = protocol_rx.recv() => {
                     if let Ok(protocol) = protocol {
                         images.protocols.push(protocol);
-                        images.timestamps.push(date_time);
+                        images.local_images.push(local_image);
                         images.sort_by_timestamp();
                     }
                 }
