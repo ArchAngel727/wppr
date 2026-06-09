@@ -1,18 +1,15 @@
 use anyhow::{Result, anyhow};
 use awww::{AwwwController, AwwwSocketStatus};
-use chrono::{DateTime, Utc};
 use hyprpanel::HyprpanelController;
-use image::DynamicImage;
 use matugen::MatugenController;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{fs, path::Path};
+use std::path::Path;
+use tracing::{error, info};
 
 use crate::cli::Cli;
 use crate::config_manager::ConfigManager;
 use crate::local_image::LocalImage;
-use crate::picker::Picker;
 use crate::scraper::Scraper;
-use crate::ui::Ui;
+use crate::ui::{Packet, Ui};
 use crate::{Config, cli};
 
 pub struct App<'a> {
@@ -63,103 +60,91 @@ impl<'a> App<'a> {
         Ok(())
     }
 
-    fn list_dir(&self) -> Result<Vec<LocalImage>> {
-        Ok(fs::read_dir(&self.config.save_dir)?
-            .filter_map(|item| {
-                let item = item.ok()?;
-                let created_at: DateTime<Utc> = item.metadata().ok()?.created().ok()?.into();
-                Some(LocalImage::from((item.path(), created_at)))
-            })
-            .collect::<Vec<LocalImage>>())
+    fn match_image(&mut self, image: &Option<LocalImage>) -> Result<()> {
+        match image {
+            Some(image) => {
+                self.config.current_wallpaper = image.path.clone();
+                self.set_wallpaper()?;
+            }
+            None => info!("No image was selected"),
+        }
+
+        Ok(())
     }
 
-    async fn load_images(images: Vec<LocalImage>) -> Result<Vec<DynamicImage>> {
-        tokio::task::spawn_blocking(move || {
-            images
-                .par_iter()
-                .map(|f| {
-                    image::ImageReader::open(f)?
-                        .with_guessed_format()?
-                        .decode()
-                        .map_err(|e| anyhow!("decode {}: {e}", f))
-                })
-                .collect::<Result<Vec<DynamicImage>, _>>()
-        })
-        .await?
+    async fn scrape_loacl_images(
+        &self,
+        tag: &Option<String>,
+        url: &mut String,
+        backstep: &Option<u32>,
+    ) -> Result<Vec<LocalImage>> {
+        let tags = Scraper::scrape_tags().await?;
+
+        if let Some(tag) = tag {
+            match tags.iter().find(|t| t.starts_with(tag)) {
+                Some(tag) => {
+                    url.push_str("/category/");
+                    url.push_str(tag);
+                }
+                None => todo!(),
+            }
+        }
+
+        Scraper::scrape(self, url, backstep.unwrap_or(0)).await
     }
 
     pub async fn menu(&mut self) -> Result<()> {
-        let mut url = "https://wallpaper-a-day.com".to_string();
+        let mut url = String::from("https://wallpaper-a-day.com");
+        let mut ui = Ui::new(&self.config)?;
 
         match &self.args.command {
             None => {
-                let mut ui = Ui::new(&self.config)?;
-                // let pick = ui.draw_grid().await;
                 let selected = ui.start_menu();
 
-                drop(ui);
-
                 match selected {
-                    Ok(Some(selected)) => println!("Selected: {}", selected),
-                    Ok(None) => println!("Nothing selected"),
-                    Err(e) => eprintln!("{}", e),
-                }
+                    Ok(Some(selected)) => {
+                        if selected == 0 {
+                            let image = ui.draw_grid(None).await;
+                            drop(ui);
 
-                // if let Some(pick) = pick {
-                //     self.config.current_wallpaper = pick.path.clone();
-                //     self.set_wallpaper()?;
-                // }
+                            self.match_image(&image)?;
+                        }
+                    }
+                    Ok(None) => info!("Nothing selected"),
+                    Err(e) => error!("{}", e),
+                }
             }
             Some(cli::Commands::Reload) => self.reload_wallpaper()?,
             Some(cli::Commands::Pick) => {
-                let mut local_images = self.list_dir()?;
-                local_images.sort_by_key(|k| k.date);
-                let images = App::load_images(local_images.clone()).await?;
-                let mut picker = Picker::new(&local_images, &images)?;
+                let image = ui.draw_grid(None).await;
+                drop(ui);
 
-                if let Ok(Some(result)) = picker.run() {
-                    self.config.current_wallpaper = local_images[result].path.clone();
-
-                    self.set_wallpaper()?;
-                    ConfigManager::save_config(self)?;
-                }
+                self.match_image(&image)?;
             }
             Some(cli::Commands::Scrape {
                 tag,
                 backstep,
                 pick,
             }) => {
-                let tags = Scraper::scrape_tags().await?;
-                let pick = *pick;
+                let scraped_local_images =
+                    self.scrape_loacl_images(tag, &mut url, backstep).await?;
 
-                if let Some(tag) = tag {
-                    match tags.iter().find(|t| t.starts_with(tag)) {
-                        Some(tag) => {
-                            url.push_str("/category/");
-                            url.push_str(tag);
-                        }
-                        None => todo!(),
-                    }
-                }
+                if *pick {
+                    let packet = Packet::from_img_vec(scraped_local_images);
+                    let image = ui.draw_grid(Some(packet)).await;
+                    drop(ui);
 
-                let local_images = Scraper::scrape(self, &url, backstep.unwrap_or(0)).await?;
-
-                if pick {
-                    let images = App::load_images(local_images.clone()).await?;
-                    let mut picker = Picker::new(&local_images, &images)?;
-
-                    if let Ok(Some(result)) = picker.run() {
-                        self.config.current_wallpaper = local_images[result].path.clone();
-                    }
+                    self.match_image(&image)?;
                 } else {
-                    self.config.current_wallpaper = local_images[0].path.clone();
+                    drop(ui);
+                    self.config.current_wallpaper = scraped_local_images[0].path.clone();
                 }
 
                 self.set_wallpaper()?;
-                ConfigManager::save_config(self)?;
             }
         };
 
+        ConfigManager::save_config(self)?;
         Ok(())
     }
 }

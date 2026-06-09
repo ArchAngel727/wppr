@@ -12,9 +12,9 @@ use ratatui::{
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    layout::{Alignment, Constraint, Direction, Flex, Layout, Rect, Size},
+    layout::{Constraint, Flex, Layout, Rect, Size},
     prelude::CrosstermBackend,
-    style::{Color, Style, Stylize},
+    style::Color,
     text::Line,
     widgets::{Block, Borders, Paragraph},
 };
@@ -22,7 +22,6 @@ use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
 use std::{
     io::{Stdout, stdout},
     path::PathBuf,
-    time::Duration,
 };
 use tokio::{fs, select, sync::mpsc};
 use tracing::error;
@@ -33,6 +32,27 @@ use crate::{
     local_image::LocalImage,
     ui::grid::{Grid, GridState},
 };
+
+pub struct Packet {
+    path: Option<PathBuf>,
+    local_images: Option<Vec<LocalImage>>,
+}
+
+impl Packet {
+    pub fn from_path(path: PathBuf) -> Self {
+        Packet {
+            path: Some(path),
+            local_images: None,
+        }
+    }
+
+    pub fn from_img_vec(vec: Vec<LocalImage>) -> Self {
+        Self {
+            path: None,
+            local_images: Some(vec),
+        }
+    }
+}
 
 pub struct Ui<'a> {
     config: &'a Config,
@@ -125,7 +145,7 @@ impl<'a> Ui<'a> {
             .split(vertical[0])[0]
     }
 
-    pub async fn draw_grid(&mut self) -> Option<LocalImage> {
+    pub async fn draw_grid(&mut self, packet: Option<Packet>) -> Option<LocalImage> {
         // TODO: Load cell_size from config file
         // let cell_size = Size::new(31, 10);
         // switch to tracing for logging
@@ -134,7 +154,10 @@ impl<'a> Ui<'a> {
         let mut events = EventStream::new();
         let mut images = ImageBuffer::new();
 
-        let local_image_rx = Ui::load_images_from_fs(self.config.save_dir.clone());
+        let local_image_rx = Ui::load_images_from_fs(match packet {
+            Some(packet) => packet,
+            None => Packet::from_path(self.config.save_dir.clone()),
+        });
         let dynamic_image_rx = Ui::load_images_from_file(local_image_rx);
         let mut protocol_rx = Ui::create_protocol_from_image(
             dynamic_image_rx,
@@ -186,10 +209,24 @@ impl<'a> Ui<'a> {
         }
     }
 
-    fn load_images_from_fs(path: PathBuf) -> mpsc::Receiver<LocalImage> {
+    fn load_images_from_fs(packet: Packet) -> mpsc::Receiver<LocalImage> {
         let (tx, rx) = mpsc::channel::<LocalImage>(16);
 
         tokio::spawn(async move {
+            if let Some(local_images) = packet.local_images {
+                for local_image in local_images {
+                    if tx.send(local_image).await.is_err() {
+                        break;
+                    }
+                }
+            }
+
+            if packet.path.is_none() {
+                return;
+            }
+
+            let path = packet.path.unwrap();
+
             let mut entries = match fs::read_dir(&path).await {
                 Ok(entries) => entries,
                 Err(e) => {

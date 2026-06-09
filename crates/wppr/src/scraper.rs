@@ -98,7 +98,7 @@ impl Scraper {
         Ok(links)
     }
 
-    pub async fn scrape(app: &mut App<'_>, url: &str, backstep: u32) -> Result<Vec<LocalImage>> {
+    pub async fn scrape(app: &App<'_>, url: &str, backstep: u32) -> Result<Vec<LocalImage>> {
         if !url.starts_with("http") {
             return Err(anyhow!("Invalid url"));
         }
