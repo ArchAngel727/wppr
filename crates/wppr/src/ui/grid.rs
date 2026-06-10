@@ -133,18 +133,31 @@ impl GridState {
     }
 
     pub fn move_left(&mut self) {
-        if let Some(selected) = self.selected
-            && selected > 0
-        {
-            self.selected = Some(selected - 1);
+        if let Some(selected) = self.selected {
+            if selected > 0 {
+                self.selected = Some(selected - 1);
+            } else {
+                self.selected = Some(if self.item_count > 0 {
+                    self.item_count - 1
+                } else {
+                    0
+                });
+
+                self.offset = (self.item_count - (self.row_count * self.column_count))
+                    % self.column_count
+                    + 1;
+            }
         }
     }
 
     pub fn move_right(&mut self) {
-        if let Some(selected) = self.selected
-            && selected + 1 < self.item_count
-        {
-            self.selected = Some(selected + 1);
+        if let Some(selected) = self.selected {
+            if selected + 1 < self.item_count {
+                self.selected = Some(selected + 1);
+            } else {
+                self.selected = Some(0);
+                self.offset = 0;
+            }
         }
     }
 }
