@@ -89,7 +89,7 @@ impl<'a> App<'a> {
                 }
                 None => {
                     error!("Tag not found");
-                    todo!();
+                    return Err(anyhow!("Tag not found! {:?}", tags));
                 }
             }
         }

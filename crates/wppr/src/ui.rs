@@ -61,6 +61,8 @@ impl<'a> Ui<'a> {
     pub fn start_menu(&mut self) -> Result<Option<StartMenuSelection>> {
         let mut selected: usize = 0;
 
+        // TODO: popup menu when <?> with help text
+
         loop {
             let _ = self.terminal.draw(|frame| {
                 let outer_layout = Layout::vertical(vec![
@@ -86,7 +88,12 @@ impl<'a> Ui<'a> {
                 let top_bar = Block::new()
                     .title(Line::from(" Wppr ").centered())
                     .borders(Borders::TOP);
-                let bottom_bar = Block::new().borders(Borders::TOP);
+                let bottom_bar = Block::new()
+                    .title(
+                        Line::from(" <h l / ← →> - Move | <Tab> - Cycle | <Enter> - Select ")
+                            .centered(),
+                    )
+                    .borders(Borders::TOP);
 
                 let left_block = Paragraph::new("Local Images")
                     .block(Block::bordered().border_style(left_color))
@@ -153,13 +160,30 @@ impl<'a> Ui<'a> {
 
         loop {
             let _ = self.terminal.draw(|frame| {
+                let layout = Layout::vertical(vec![
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                ])
+                .flex(Flex::Center)
+                .split(frame.area());
+
+                let top_bar = Block::new()
+                    .title(Line::from(" Wppr ").centered())
+                    .borders(Borders::TOP);
+                let bottom_bar = Block::new()
+                    .title(Line::from(" <hjkl/←↓↑→> - Move | <Enter> - Select ").centered())
+                    .borders(Borders::TOP);
+
                 let protocol_count = images.len();
                 let grid = Grid::new(&mut images.protocols, cell_size);
 
                 grid_state.update_item_count(protocol_count);
-                grid_state.update_size(&frame.area().as_size(), &cell_size);
+                grid_state.update_size(&layout[1].as_size(), &cell_size);
 
-                frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
+                frame.render_widget(top_bar, layout[0]);
+                frame.render_stateful_widget(grid, layout[1], &mut grid_state);
+                frame.render_widget(bottom_bar, layout[2]);
             });
 
             select! {
