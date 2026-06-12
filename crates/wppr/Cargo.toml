@@ -25,6 +25,7 @@ crossterm = {
   default-features = false,
   features = ["event-stream"]
 }
+dirs = { version = "6.0.0", default-features = false }
 futures = { version = "0.3.32", default-features = false, features = ["std"] }
 home = "0.5.12"
 image = "0.25.10"
