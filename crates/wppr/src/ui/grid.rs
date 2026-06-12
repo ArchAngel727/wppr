@@ -13,8 +13,8 @@ pub struct Grid<'a> {
 
 pub struct GridState {
     item_count: usize,
-    row_count: usize,
-    column_count: usize,
+    cells_in_row: usize,
+    cells_in_column: usize,
     offset: usize,
     selected: Option<usize>,
 }
@@ -55,7 +55,7 @@ impl<'a> StatefulWidget for Grid<'a> {
             .collect();
 
         for (i, cell) in cells.iter().enumerate() {
-            let index = i + (state.offset * state.column_count);
+            let index = i + (state.offset * state.cells_in_row);
 
             if index >= self.items.len() {
                 break;
@@ -83,8 +83,8 @@ impl GridState {
     pub fn new() -> Self {
         Self {
             item_count: 0,
-            row_count: 0,
-            column_count: 0,
+            cells_in_row: 0,
+            cells_in_column: 0,
             offset: 0,
             selected: Some(0),
         }
@@ -99,18 +99,18 @@ impl GridState {
     }
 
     pub fn update_size(&mut self, area: &Size, cell_size: &Size) {
-        self.column_count = (area.width / cell_size.width) as usize;
-        self.row_count = (area.height / cell_size.height) as usize;
+        self.cells_in_row = (area.width / cell_size.width) as usize;
+        self.cells_in_column = (area.height / cell_size.height) as usize;
     }
 
     pub fn move_up(&mut self) {
         if let Some(selected) = self.selected
-            && selected >= self.column_count
+            && selected >= self.cells_in_row
         {
-            self.selected = Some(selected - self.column_count);
+            self.selected = Some(selected - self.cells_in_row);
 
             if let Some(selected) = self.selected
-                && selected < self.offset * self.column_count
+                && selected < self.offset * self.cells_in_row
             {
                 self.offset -= 1;
             }
@@ -119,13 +119,14 @@ impl GridState {
 
     pub fn move_down(&mut self) {
         if let Some(selected) = self.selected
-            && selected + self.column_count < self.item_count
+            && selected + self.cells_in_row < self.item_count
         {
-            self.selected = Some(selected + self.column_count);
+            self.selected = Some(selected + self.cells_in_row);
 
             if let Some(selected) = self.selected
                 && selected
-                    > (self.offset * self.column_count + self.row_count * self.column_count) - 1
+                    > (self.offset * self.cells_in_row) + (self.cells_in_row * self.cells_in_column)
+                        - 1
             {
                 self.offset += 1;
             }
@@ -136,6 +137,8 @@ impl GridState {
         if let Some(selected) = self.selected {
             if selected > 0 {
                 self.selected = Some(selected - 1);
+
+                // FIX: add scrolling
             } else {
                 self.selected = Some(if self.item_count > 0 {
                     self.item_count - 1
@@ -143,10 +146,10 @@ impl GridState {
                     0
                 });
 
-                // FIX: This aint working
-                self.offset = (self.item_count - (self.row_count * self.column_count))
-                    % self.column_count
-                    + 1;
+                let num_visible_rows = self.cells_in_column;
+                let selected_row = selected / self.cells_in_row;
+
+                self.offset = selected_row.saturating_sub(num_visible_rows.saturating_sub(1));
             }
         }
     }
@@ -155,6 +158,12 @@ impl GridState {
         if let Some(selected) = self.selected {
             if selected + 1 < self.item_count {
                 self.selected = Some(selected + 1);
+
+                // FIX: add scrolling
+                let selected_row = selected / self.cells_in_row;
+                if selected >= ((selected_row + 1) * self.cells_in_column) - 1 {
+                    self.offset += 1;
+                }
             } else {
                 self.selected = Some(0);
                 self.offset = 0;
