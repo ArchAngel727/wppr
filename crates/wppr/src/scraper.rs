@@ -8,33 +8,47 @@ use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tracing::error;
 
 pub struct Scraper {}
 
 impl Scraper {
     async fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
-        fs::create_dir_all(dir).await?;
-        fs::write(name, data).await?;
+        fs::create_dir_all(dir)
+            .await
+            .inspect_err(|e| error!("Failed to create dir while saving file: {e:#}"))?;
+        fs::write(name, data)
+            .await
+            .inspect_err(|e| error!("Failed to write file to disk {e:#}"))?;
 
         Ok(())
     }
 
     async fn download_page(url: &str) -> Result<String, reqwest::Error> {
-        reqwest::get(url).await?.error_for_status()?.text().await
+        reqwest::get(url)
+            .await
+            .inspect_err(|e| error!("Get request failed: {e:#}"))?
+            .error_for_status()
+            .inspect_err(|e| error!("Get request status code: {e:#}"))?
+            .text()
+            .await
     }
 
     async fn download_image(url: &str) -> Result<Vec<u8>> {
         Ok(reqwest::get(url)
-            .await?
-            .error_for_status()?
+            .await
+            .inspect_err(|e| error!("Get request failed: {e:#}"))?
+            .error_for_status()
+            .inspect_err(|e| error!("Get request status code: {e:#}"))?
             .bytes()
-            .await?
+            .await
+            .inspect_err(|e| error!("Failed to download bytes: {e:#}"))?
             .into_iter()
             .collect())
     }
 
     async fn process_image(image: &OnlineImage, save_dir: &Path) -> Result<LocalImage> {
-        let name: String = Sha256::digest(&image.link).to_vec()[..8]
+        let name: String = Sha256::digest(&image.link)[..8]
             .iter()
             .map(|c| format!("{:02x}", c))
             .collect();
@@ -50,7 +64,7 @@ impl Scraper {
     }
 
     pub async fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
-        let mut links: Vec<OnlineImage> = vec![];
+        let mut links: Vec<OnlineImage> = Vec::new();
         let regex = Regex::new(r#"\/d\/(.*?)\/view"#)?;
 
         let document = Html::parse_document(page);
@@ -87,7 +101,9 @@ impl Scraper {
                 match DateTime::parse_from_rfc3339(date_str) {
                     Ok(date) => image.date = date.to_utc(),
                     Err(e) => {
-                        return Err(anyhow!("Failed to parse date {e}"));
+                        let error = anyhow!("Failed to parse date {e:#}");
+                        error!("{error}");
+                        return Err(error);
                     }
                 };
             }
@@ -126,9 +142,11 @@ impl Scraper {
 
     pub async fn scrape_tags() -> Result<Vec<String>> {
         let page = reqwest::get("https://wallpaper-a-day.com/category/")
-            .await?
+            .await
+            .inspect_err(|e| error!("Failed to download tags page: {e:#}"))?
             .text()
-            .await?;
+            .await
+            .inspect_err(|e| error!("Failed to get tags page text {e:#}"))?;
 
         let document = Html::parse_document(&page);
         let mut tags: Vec<String> = vec![];

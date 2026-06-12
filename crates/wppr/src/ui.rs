@@ -61,8 +61,6 @@ impl<'a> Ui<'a> {
     pub fn start_menu(&mut self) -> Result<Option<StartMenuSelection>> {
         let mut selected: usize = 0;
 
-        // TODO: popup menu when <?> with help text
-
         loop {
             let _ = self.terminal.draw(|frame| {
                 let outer_layout = Layout::vertical(vec![
@@ -141,7 +139,8 @@ impl<'a> Ui<'a> {
     }
 
     pub async fn picker_grid(&mut self, packet: Option<Packet>) -> Option<LocalImage> {
-        // TODO: Load cell_size from config file
+        // TODO: Add an options menu to select cell size
+        // Load cell_size from config file
         // let cell_size = Size::new(31, 10);
         let cell_size = Size::new(20, 7);
         let mut grid_state = GridState::new();

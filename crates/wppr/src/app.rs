@@ -31,8 +31,10 @@ impl<'a> App<'a> {
     pub fn set_wallpaper(&self) -> Result<()> {
         match AwwwController::check_daemon_status() {
             AwwwSocketStatus::Running => {
-                AwwwController::set_wallpaper(&self.config.current_wallpaper)?;
-                MatugenController::update_colors(&self.config.current_wallpaper)?;
+                AwwwController::set_wallpaper(&self.config.current_wallpaper)
+                    .inspect_err(|e| error!("{e:#}"))?;
+                MatugenController::update_colors(&self.config.current_wallpaper)
+                    .inspect_err(|e| error!("{e:#}"))?;
             }
             AwwwSocketStatus::NotRunning => {
                 if let Some(path) = self.config.current_wallpaper.to_str() {
@@ -43,7 +45,8 @@ impl<'a> App<'a> {
 
         match HyprpanelController::check_daemon_status() {
             hyprpanel::HyprpanelSocketStatus::Running => {
-                HyprpanelController::set_wallpaper(&self.config.current_wallpaper)?;
+                HyprpanelController::set_wallpaper(&self.config.current_wallpaper)
+                    .inspect_err(|e| error!("{e:#}"))?;
             }
             hyprpanel::HyprpanelSocketStatus::NotRunning => (),
         }
@@ -53,10 +56,12 @@ impl<'a> App<'a> {
 
     pub fn reload_wallpaper(&self) -> Result<()> {
         if !self.config.current_wallpaper.exists() {
-            return Err(anyhow!("No wallpaper selected"));
+            let e = anyhow!("No wallpaper selected");
+            error!("{e}");
+            return Err(anyhow!(e));
         }
 
-        self.set_wallpaper()?;
+        self.set_wallpaper().inspect_err(|e| error!("{e:#}"))?;
 
         Ok(())
     }
@@ -65,9 +70,16 @@ impl<'a> App<'a> {
         match image {
             Some(image) => {
                 self.config.current_wallpaper = image.path.clone();
-                self.set_wallpaper()?;
+                info!(
+                    "Setting wallpaper {}",
+                    self.config.current_wallpaper.display()
+                );
+                self.set_wallpaper().inspect_err(|e| error!("{e:#}"))?;
             }
-            None => info!("No image was selected"),
+            None => {
+                #[cfg(debug_assertions)]
+                info!("No image was selected");
+            }
         }
 
         Ok(())
@@ -88,8 +100,9 @@ impl<'a> App<'a> {
                     url.push_str(tag);
                 }
                 None => {
-                    error!("Tag not found");
-                    return Err(anyhow!("Tag not found! {:?}", tags));
+                    let e = anyhow!("Tag not found");
+                    error!("{e}");
+                    return Err(e);
                 }
             }
         }
@@ -128,7 +141,9 @@ impl<'a> App<'a> {
                     Err(e) => error!("{}", e),
                 }
             }
-            Some(cli::Commands::Reload) => self.reload_wallpaper()?,
+            Some(cli::Commands::Reload) => {
+                self.reload_wallpaper().inspect_err(|e| error!("{e:#}"))?
+            }
             Some(cli::Commands::Pick) => {
                 let image = ui.picker_grid(None).await;
                 drop(ui);
@@ -140,8 +155,10 @@ impl<'a> App<'a> {
                 backstep,
                 pick,
             }) => {
-                let scraped_local_images =
-                    self.scrape_loacl_images(tag, &mut url, backstep).await?;
+                let scraped_local_images = self
+                    .scrape_loacl_images(tag, &mut url, backstep)
+                    .await
+                    .inspect_err(|e| error!("{e:#}"))?;
 
                 if *pick {
                     let packet = Packet::from_img_vec(scraped_local_images);
@@ -149,6 +166,7 @@ impl<'a> App<'a> {
                     drop(ui);
 
                     self.match_image(&image)?;
+                    return Ok(());
                 } else {
                     drop(ui);
                     self.config.current_wallpaper = scraped_local_images[0].path.clone();
