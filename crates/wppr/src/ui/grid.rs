@@ -143,6 +143,7 @@ impl GridState {
                     0
                 });
 
+                // FIX: This aint working
                 self.offset = (self.item_count - (self.row_count * self.column_count))
                     % self.column_count
                     + 1;
