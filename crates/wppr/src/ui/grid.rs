@@ -134,40 +134,18 @@ impl GridState {
     }
 
     pub fn move_left(&mut self) {
-        if let Some(selected) = self.selected {
-            if selected > 0 {
-                self.selected = Some(selected - 1);
-
-                // FIX: add scrolling
-            } else {
-                self.selected = Some(if self.item_count > 0 {
-                    self.item_count - 1
-                } else {
-                    0
-                });
-
-                let num_visible_rows = self.cells_in_column;
-                let selected_row = selected / self.cells_in_row;
-
-                self.offset = selected_row.saturating_sub(num_visible_rows.saturating_sub(1));
-            }
+        if let Some(selected) = self.selected
+            && selected > 0
+        {
+            self.selected = Some(selected - 1);
         }
     }
 
     pub fn move_right(&mut self) {
-        if let Some(selected) = self.selected {
-            if selected + 1 < self.item_count {
-                self.selected = Some(selected + 1);
-
-                // FIX: add scrolling
-                let selected_row = selected / self.cells_in_row;
-                if selected >= ((selected_row + 1) * self.cells_in_column) - 1 {
-                    self.offset += 1;
-                }
-            } else {
-                self.selected = Some(0);
-                self.offset = 0;
-            }
+        if let Some(selected) = self.selected
+            && selected + 1 < self.item_count
+        {
+            self.selected = Some(selected + 1);
         }
     }
 }
