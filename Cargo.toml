@@ -15,3 +15,8 @@ tracing-subscriber = {
   default-features = false,
   features = ["env-filter"]
 }
+
+[profile.release]
+opt-level = "s"
+strip = "symbols"
+lto = true
