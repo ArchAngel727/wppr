@@ -3,8 +3,6 @@ use futures::StreamExt;
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Size},
-    text::Line,
-    widgets::{Block, Borders},
 };
 use ratatui_image::picker::Picker;
 use tracing::error;
@@ -13,7 +11,10 @@ use crate::{
     image_buffer::ImageBuffer,
     image_processor::{ImageProcessor, ImageProcessorArgs},
     local_image::LocalImage,
-    ui::grid::{Grid, GridState},
+    ui::{
+        grid::{Grid, GridState},
+        screen,
+    },
 };
 
 pub struct ScrapeImages {
@@ -29,10 +30,10 @@ pub enum ScrapeImagesEvent {
 }
 
 impl ScrapeImages {
-    pub fn new(picker: Picker, args: ImageProcessorArgs) -> Self {
+    pub fn new(picker: Picker, args: ImageProcessorArgs, cell_size: Size) -> Self {
         Self {
             grid_state: GridState::new(),
-            cell_size: Size::new(20, 7),
+            cell_size,
             image_buffer: ImageBuffer::new(),
             image_processor: ImageProcessor::new(picker, args),
         }
@@ -47,22 +48,18 @@ impl ScrapeImages {
         .flex(Flex::Center)
         .split(frame.area());
 
-        let top_bar = Block::new()
-            .title(Line::from(" Wppr ").centered())
-            .borders(Borders::TOP);
-        let bottom_bar = Block::new()
-            .title(Line::from(" <hjkl/←↓↑→> - Move | <Enter> - Select ").centered())
-            .borders(Borders::TOP);
-
         self.grid_state.update_item_count(self.image_buffer.len());
         self.grid_state
             .update_size(layout[1].as_size(), self.cell_size);
 
         let grid = Grid::new(&mut self.image_buffer.protocols, self.cell_size);
 
-        frame.render_widget(top_bar, layout[0]);
+        frame.render_widget(screen::create_top_bar(), layout[0]);
         frame.render_stateful_widget(grid, layout[1], &mut self.grid_state);
-        frame.render_widget(bottom_bar, layout[2]);
+        frame.render_widget(
+            screen::create_bottom_bar(" <hjkl/←↓↑→> - Move | <Enter> - Select "),
+            layout[2],
+        );
     }
 
     pub async fn event(&mut self, event_stream: &mut EventStream) -> ScrapeImagesEvent {
@@ -120,7 +117,3 @@ impl ScrapeImages {
         ScrapeImagesEvent::Continue
     }
 }
-
-// TODO: Add an options menu to select cell size
-// Load cell_size from config file
-// let cell_size = Size::new(31, 10);

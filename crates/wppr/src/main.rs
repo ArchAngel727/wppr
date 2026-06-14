@@ -55,9 +55,10 @@ async fn main() -> Result<()> {
         .inspect_err(|e| error!("{e:#}"))?;
 
     let config_path = PathBuf::from(format!("{}/.config/wppr/config.json", home_dir.display()));
-    let config = ConfigManager::load_config(&config_path).inspect_err(|e| error!("{e:#}"))?;
+    let option_config =
+        ConfigManager::load_config(&config_path).inspect_err(|e| error!("{e:#}"))?;
 
-    let mut app = App::new(&config_path, config, cli);
+    let mut app = App::new(&config_path, option_config.into(), cli);
 
     if !app.config.save_dir.exists() {
         let dir_path = PathBuf::from(format!("{}/Pictures/wppr", home_dir.display()));
@@ -70,6 +71,8 @@ async fn main() -> Result<()> {
     }
 
     app.menu().await.inspect_err(|e| error!("{e:#}"))?;
+
+    ConfigManager::save_config(&app)?;
 
     Ok(())
 }

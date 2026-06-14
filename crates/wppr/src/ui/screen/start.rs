@@ -4,8 +4,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout},
     style::Color,
-    text::Line,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Paragraph},
 };
 
 use crate::ui::screen;
@@ -43,13 +42,6 @@ impl Start {
             (Color::Black, Color::White)
         };
 
-        let top_bar = Block::new()
-            .title(Line::from(" Wppr ").centered())
-            .borders(Borders::TOP);
-        let bottom_bar = Block::new()
-            .title(Line::from(" <h l / ← →> - Move | <Tab> - Cycle | <Enter> - Select ").centered())
-            .borders(Borders::TOP);
-
         let left_block = Paragraph::new("Local Images")
             .block(Block::bordered().border_style(left_color))
             .centered();
@@ -60,8 +52,13 @@ impl Start {
         let left = screen::center_rect(inner_layout[0], 18, 7);
         let right = screen::center_rect(inner_layout[1], 18, 7);
 
-        frame.render_widget(top_bar, outer_layout[0]);
-        frame.render_widget(bottom_bar, outer_layout[2]);
+        frame.render_widget(screen::create_top_bar(), outer_layout[0]);
+        frame.render_widget(
+            screen::create_bottom_bar(
+                " <h l / ← →> - Move | <Tab> - Cycle | <Enter> - Select | <o> - Options ",
+            ),
+            outer_layout[2],
+        );
 
         frame.render_widget(left_block, left);
         frame.render_widget(right_block, right);
@@ -76,6 +73,7 @@ impl Start {
             KeyCode::Char('q') => return StartEvent::Exit(None),
             KeyCode::Char('h') | KeyCode::Left => self.selected = 0,
             KeyCode::Char('l') | KeyCode::Right => self.selected = 1,
+            KeyCode::Char('o') => return StartEvent::Exit(Some(2usize)),
             KeyCode::Tab => self.selected = (self.selected + 1) % 2,
             KeyCode::Enter => return StartEvent::Exit(Some(self.selected)),
             _ => {}

@@ -14,7 +14,7 @@ impl TooSmall {
         Self {}
     }
 
-    pub fn render(&self, frame: &mut Frame) {
+    pub fn draw(&self, frame: &mut Frame) {
         frame.render_widget(Paragraph::new("Too small"), frame.area());
     }
 

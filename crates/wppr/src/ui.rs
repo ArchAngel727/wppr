@@ -15,12 +15,15 @@ use std::io::{Stdout, stdout};
 use tracing::{error, info};
 
 use crate::{
-    config::Config,
+    config::{self, Config},
     image_processor::ImageProcessorArgs,
     scraper::Scraper,
     ui::{
         event::{EventResult, UiResult},
-        screen::{MIN_SIZE, Screen, local_images::LocalImages, scrape_images::ScrapeImages},
+        screen::{
+            MIN_SIZE, Screen, local_images::LocalImages, options::Options,
+            scrape_images::ScrapeImages,
+        },
         ui_state::UiState,
     },
 };
@@ -30,11 +33,11 @@ pub struct Ui<'a> {
     picker: Option<Picker>,
     state: UiState,
     event_stream: EventStream,
-    config: &'a Config,
+    config: &'a mut Config,
 }
 
 impl<'a> Ui<'a> {
-    pub fn new(config: &'a Config) -> Result<Self> {
+    pub fn new(config: &'a mut Config) -> Result<Self> {
         enable_raw_mode()?;
         execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
 
@@ -106,7 +109,12 @@ impl<'a> Ui<'a> {
                     screen.draw(frame);
                 }
             }
-            Screen::TooSmall => state.too_small.render(frame),
+            Screen::TooSmall => state.too_small.draw(frame),
+            Screen::Options => {
+                if let Some(screen) = &mut state.options {
+                    screen.draw(frame);
+                }
+            }
         }
     }
 
@@ -130,6 +138,7 @@ impl<'a> Ui<'a> {
                             self.state.local_images = Some(LocalImages::new(
                                 self.picker.take().expect("Picker already taken"),
                                 img_args,
+                                config::CELL_SIZE[self.config.cell_size],
                             ));
                         }
                         1 => {
@@ -147,9 +156,14 @@ impl<'a> Ui<'a> {
                             self.state.scrape_images = Some(ScrapeImages::new(
                                 self.picker.take().expect("Picker already taken"),
                                 img_args,
+                                config::CELL_SIZE[self.config.cell_size],
                             ));
                         }
-                        _ => unreachable!("selected can only be 0 or 1"),
+                        2 => {
+                            self.state.screen = Screen::Options;
+                            self.state.options = Some(Options::new(self.config.cell_size));
+                        }
+                        _ => unreachable!("selected can only be between 0 and 2 inclusive"),
                     }
 
                     Ok(EventResult::Exit(None))
@@ -158,7 +172,6 @@ impl<'a> Ui<'a> {
             },
 
             Screen::LocalImages => {
-                // TODO: maybe combine these two
                 let Some(local_images_screen) = &mut self.state.local_images else {
                     return Ok(EventResult::Continue);
                 };
@@ -196,7 +209,43 @@ impl<'a> Ui<'a> {
                     Ok(EventResult::Exit(Some(UiResult::Cancelled)))
                 }
             },
+            Screen::Options => {
+                let Some(options_screen) = &mut self.state.options else {
+                    return Ok(EventResult::Continue);
+                };
+
+                match options_screen.event(&mut self.event_stream).await {
+                    screen::options::OptionsEvent::Continue => Ok(EventResult::Continue),
+                    screen::options::OptionsEvent::Back => {
+                        self.go_back(Screen::Start);
+
+                        Ok(EventResult::Continue)
+                    }
+                    screen::options::OptionsEvent::Exit(Some(selected)) => {
+                        #[cfg(debug_assertions)]
+                        info!("Selected cell size: {}", selected);
+
+                        self.config.cell_size = selected;
+                        self.go_back(Screen::Start);
+
+                        Ok(EventResult::Continue)
+                    }
+                    screen::options::OptionsEvent::Exit(None) => {
+                        Ok(EventResult::Exit(Some(UiResult::Cancelled)))
+                    }
+                }
+            }
         }
+    }
+
+    fn go_back(&mut self, screen: Screen) {
+        self.state.screen = if let Some(prev_screen) = self.state.prev_screen {
+            prev_screen
+        } else {
+            screen
+        };
+
+        self.state.prev_screen = None;
     }
 }
 

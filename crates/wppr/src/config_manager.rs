@@ -1,5 +1,4 @@
-use crate::app::App;
-use crate::config::Config;
+use crate::{app::App, config::OptionConfig};
 
 use anyhow::Result;
 use std::{
@@ -31,11 +30,12 @@ impl ConfigManager {
         Ok(())
     }
 
-    pub fn load_config(path: &Path) -> Result<Config> {
+    pub fn load_config(path: &Path) -> Result<OptionConfig> {
         let default_config = r#"{
         "current_wallpaper": "",
         "current_dir": "",
-        "save_dir": ""
+        "save_dir": "",
+        "cell_size": 0
     }"#;
 
         if let Some(dir) = path.parent()
@@ -46,12 +46,13 @@ impl ConfigManager {
         }
 
         if path.exists() {
-            Ok(serde_json::from_str(
-                fs::read_to_string(path)
-                    .inspect_err(|e| error!("Failed to read config: {e:#}"))?
-                    .as_str(),
-            )
-            .inspect_err(|e| error!("Failed to parse config as json: {e:#}"))?)
+            let str =
+                fs::read_to_string(path).inspect_err(|e| error!("Failed to read config: {e:#}"))?;
+
+            let option_config: OptionConfig = serde_json::from_str(&str)
+                .inspect_err(|e| error!("Failed to parse config as json: {e:#}"))?;
+
+            Ok(option_config)
         } else {
             let mut file = File::create(path)?;
             file.write_all(default_config.as_bytes())

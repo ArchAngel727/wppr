@@ -6,7 +6,6 @@ use std::path::Path;
 use tracing::{error, info};
 
 use crate::cli::Cli;
-use crate::config_manager::ConfigManager;
 use crate::image_processor::ImageProcessorArgs;
 use crate::scraper::Scraper;
 use crate::ui::{Ui, event::UiResult, screen::Screen};
@@ -82,7 +81,8 @@ impl<'a> App<'a> {
     }
 
     pub async fn menu(&mut self) -> Result<()> {
-        let mut ui = Ui::new(&self.config)?;
+        let save_dir = self.config.save_dir.clone();
+        let mut ui = Ui::new(&mut self.config)?;
 
         match &self.args.command {
             None => {
@@ -93,10 +93,11 @@ impl<'a> App<'a> {
                 self.match_ui_result(result)?;
             }
             Some(cli::Commands::Reload) => {
+                drop(ui);
                 self.reload_wallpaper().inspect_err(|e| error!("{e:#}"))?;
             }
             Some(cli::Commands::Pick) => {
-                let args = ImageProcessorArgs::from_path(self.config.save_dir.clone());
+                let args = ImageProcessorArgs::from_path(save_dir);
                 let result = ui.run(Some(Screen::LocalImages), Some(args)).await;
 
                 drop(ui);
@@ -109,7 +110,7 @@ impl<'a> App<'a> {
                 pick,
             }) => {
                 let scraped_local_images =
-                    Scraper::scrape_loacl_images(&self.config.save_dir, tag.clone(), *backstep)
+                    Scraper::scrape_loacl_images(&save_dir, tag.clone(), *backstep)
                         .await
                         .inspect_err(|e| error!("{e:#}"))?;
 
@@ -130,7 +131,6 @@ impl<'a> App<'a> {
             }
         }
 
-        ConfigManager::save_config(self)?;
         Ok(())
     }
 }
