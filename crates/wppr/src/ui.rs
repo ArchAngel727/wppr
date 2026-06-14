@@ -12,7 +12,10 @@ use crossterm::{
 use ratatui::{Frame, Terminal, prelude::CrosstermBackend};
 use ratatui_image::picker::Picker;
 use std::io::{Stdout, stdout};
-use tracing::{error, info};
+use tracing::error;
+
+#[cfg(debug_assertions)]
+use tracing::info;
 
 use crate::{
     config::{self, Config},
