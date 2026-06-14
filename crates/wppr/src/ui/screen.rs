@@ -7,6 +7,7 @@ use ratatui::layout::{Constraint, Flex, Layout, Rect, Size};
 
 pub const MIN_SIZE: Size = Size::new(80, 23);
 
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub enum Screen {
     Start,
     LocalImages,

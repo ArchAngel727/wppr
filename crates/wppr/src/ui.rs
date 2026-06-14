@@ -20,10 +20,7 @@ use crate::{
     scraper::Scraper,
     ui::{
         event::{EventResult, UiResult},
-        screen::{
-            MIN_SIZE, Screen, local_images::LocalImages, scrape_images::ScrapeImages,
-            too_small::TooSmall,
-        },
+        screen::{MIN_SIZE, Screen, local_images::LocalImages, scrape_images::ScrapeImages},
         ui_state::UiState,
     },
 };
@@ -90,23 +87,26 @@ impl<'a> Ui<'a> {
         let frame_size = frame.area();
 
         if frame_size.width < MIN_SIZE.width || frame_size.height < MIN_SIZE.height {
+            state.prev_screen = Some(state.screen);
             state.screen = Screen::TooSmall;
-            TooSmall::render(frame);
-        } else {
-            match state.screen {
-                Screen::Start => state.start.draw(frame),
-                Screen::LocalImages => {
-                    if let Some(screen) = &mut state.local_images {
-                        screen.draw(frame);
-                    }
+        } else if let Some(prev_screen) = state.prev_screen {
+            state.screen = prev_screen;
+            state.prev_screen = None;
+        }
+
+        match state.screen {
+            Screen::Start => state.start.draw(frame),
+            Screen::LocalImages => {
+                if let Some(screen) = &mut state.local_images {
+                    screen.draw(frame);
                 }
-                Screen::ScrapeImages => {
-                    if let Some(screen) = &mut state.scrape_images {
-                        screen.draw(frame);
-                    }
-                }
-                Screen::TooSmall => {}
             }
+            Screen::ScrapeImages => {
+                if let Some(screen) = &mut state.scrape_images {
+                    screen.draw(frame);
+                }
+            }
+            Screen::TooSmall => state.too_small.render(frame),
         }
     }
 
@@ -190,7 +190,12 @@ impl<'a> Ui<'a> {
                 }
             }
 
-            Screen::TooSmall => Ok(EventResult::Continue),
+            Screen::TooSmall => match self.state.too_small.event(&mut self.event_stream).await {
+                screen::too_small::TooSmallEvent::Continue => Ok(EventResult::Continue),
+                screen::too_small::TooSmallEvent::Exit => {
+                    Ok(EventResult::Exit(Some(UiResult::Cancelled)))
+                }
+            },
         }
     }
 }
