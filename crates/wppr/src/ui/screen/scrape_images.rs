@@ -56,7 +56,7 @@ impl ScrapeImages {
 
         self.grid_state.update_item_count(self.image_buffer.len());
         self.grid_state
-            .update_size(&layout[1].as_size(), &self.cell_size);
+            .update_size(layout[1].as_size(), self.cell_size);
 
         let grid = Grid::new(&mut self.image_buffer.protocols, self.cell_size);
 
@@ -111,9 +111,8 @@ impl ScrapeImages {
                     return ScrapeImagesEvent::Exit(Some(
                         self.image_buffer.local_images[index].clone(),
                     ));
-                } else {
-                    return ScrapeImagesEvent::Exit(None);
                 }
+                return ScrapeImagesEvent::Exit(None);
             }
             _ => {}
         }

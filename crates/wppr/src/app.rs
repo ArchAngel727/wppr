@@ -19,7 +19,7 @@ pub struct App<'a> {
 }
 
 impl<'a> App<'a> {
-    pub fn new(config_path: &'a Path, config: Config, args: Cli) -> App<'a> {
+    pub const fn new(config_path: &'a Path, config: Config, args: Cli) -> Self {
         App {
             config_path,
             config,
@@ -68,7 +68,7 @@ impl<'a> App<'a> {
     fn match_ui_result(&mut self, selected: Result<UiResult>) -> Result<()> {
         match selected.inspect_err(|e| error!("{e:#}"))? {
             UiResult::Selected(local_image) => {
-                self.config.current_wallpaper = local_image.path.clone();
+                self.config.current_wallpaper = local_image.path;
                 info!(
                     "Setting wallpaper {}",
                     self.config.current_wallpaper.display()
@@ -93,7 +93,7 @@ impl<'a> App<'a> {
                 self.match_ui_result(result)?;
             }
             Some(cli::Commands::Reload) => {
-                self.reload_wallpaper().inspect_err(|e| error!("{e:#}"))?
+                self.reload_wallpaper().inspect_err(|e| error!("{e:#}"))?;
             }
             Some(cli::Commands::Pick) => {
                 let args = ImageProcessorArgs::from_path(self.config.save_dir.clone());
@@ -109,7 +109,7 @@ impl<'a> App<'a> {
                 pick,
             }) => {
                 let scraped_local_images =
-                    Scraper::scrape_loacl_images(&self.config.save_dir, tag, backstep)
+                    Scraper::scrape_loacl_images(&self.config.save_dir, tag.clone(), *backstep)
                         .await
                         .inspect_err(|e| error!("{e:#}"))?;
 
@@ -120,14 +120,15 @@ impl<'a> App<'a> {
 
                     self.match_ui_result(result)?;
                     return Ok(());
-                } else {
-                    drop(ui);
-                    self.config.current_wallpaper = scraped_local_images[0].path.clone();
                 }
+                drop(ui);
+                self.config
+                    .current_wallpaper
+                    .clone_from(&scraped_local_images[0].path);
 
                 self.set_wallpaper()?;
             }
-        };
+        }
 
         ConfigManager::save_config(self)?;
         Ok(())

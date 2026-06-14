@@ -6,7 +6,10 @@ use futures::future::join_all;
 use regex::Regex;
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Write,
+    path::{Path, PathBuf},
+};
 use tokio::fs;
 use tracing::error;
 
@@ -48,24 +51,27 @@ impl Scraper {
     }
 
     async fn process_image(image: &OnlineImage, save_dir: &Path) -> Result<LocalImage> {
-        let name: String = Sha256::digest(&image.link)[..8]
-            .iter()
-            .map(|c| format!("{:02x}", c))
-            .collect();
+        let name: String =
+            Sha256::digest(&image.link)[..8]
+                .iter()
+                .fold(String::new(), |mut acc, slice| {
+                    let _ = write!(acc, "{slice:02x}");
+                    acc
+                });
 
         let path = PathBuf::from(save_dir).join(name).with_extension("png");
 
         if !path.exists() {
-            let img = Scraper::download_image(&image.link).await?;
-            Scraper::save_file(save_dir, &path, &img).await?;
+            let img = Self::download_image(&image.link).await?;
+            Self::save_file(save_dir, &path, &img).await?;
         }
 
         Ok((path, image.date).into())
     }
 
-    pub async fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
+    pub fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
         let mut links: Vec<OnlineImage> = Vec::new();
-        let regex = Regex::new(r#"\/d\/(.*?)\/view"#)?;
+        let regex = Regex::new(r"\/d\/(.*?)\/view")?;
 
         let document = Html::parse_document(page);
 
@@ -74,7 +80,7 @@ impl Scraper {
         let link_selector = Selector::parse("a").unwrap();
         let date_selector = Selector::parse("time").unwrap();
 
-        let main = document.select(&main_selector).collect::<Vec<_>>()[0];
+        let main = document.select(&main_selector).nth(0).unwrap();
 
         for article in main.select(&article_selector) {
             let mut image = OnlineImage::new();
@@ -89,14 +95,13 @@ impl Scraper {
                 {
                     image.link = format!("https://drive.google.com/uc?export=view&id={}", &id[1]);
                 } else {
-                    image.link = href
+                    image.link = href;
                 }
             }
 
             if let Some(date_str) = article
                 .select(&date_selector)
-                .filter_map(|date_element| date_element.value().attr("datetime"))
-                .next()
+                .find_map(|date_element| date_element.value().attr("datetime"))
             {
                 match DateTime::parse_from_rfc3339(date_str) {
                     Ok(date) => image.date = date.to_utc(),
@@ -105,7 +110,7 @@ impl Scraper {
                         error!("{error}");
                         return Err(error);
                     }
-                };
+                }
             }
 
             links.push(image);
@@ -119,13 +124,12 @@ impl Scraper {
             return Err(anyhow!("Invalid url"));
         }
 
-        let page = Scraper::download_page(url).await?;
-        let links =
-            &Scraper::scrape_links(&page).await?[backstep as usize..(4 + backstep) as usize];
+        let page = Self::download_page(url).await?;
+        let links = &Self::scrape_links(&page)?[backstep as usize..(4 + backstep) as usize];
 
         let futures: Vec<_> = links
             .iter()
-            .map(|link| Scraper::process_image(link, save_dir))
+            .map(|link| Self::process_image(link, save_dir))
             .collect();
 
         let mut res: Vec<LocalImage> = join_all(futures)
@@ -157,7 +161,7 @@ impl Scraper {
             li.select(&link_selector).for_each(|link| {
                 tags.push(
                     link.text()
-                        .map(|str| str.to_string().replace(" ", "-").replace("/", "-"))
+                        .map(|str| str.to_string().replace([' ', '/'], "-"))
                         .collect(),
                 );
             });
@@ -172,26 +176,23 @@ impl Scraper {
 
     pub async fn scrape_loacl_images(
         path: &Path,
-        tag: &Option<String>,
-        backstep: &Option<u32>,
+        tag: Option<String>,
+        backstep: Option<u32>,
     ) -> Result<Vec<LocalImage>> {
         let mut url = String::from("https://wallpaper-a-day.com");
-        let tags = Scraper::scrape_tags().await?;
+        let tags = Self::scrape_tags().await?;
 
         if let Some(tag) = tag {
-            match tags.iter().find(|t| t.starts_with(tag)) {
-                Some(tag) => {
-                    url.push_str("/category/");
-                    url.push_str(tag);
-                }
-                None => {
-                    let e = anyhow!("Tag not found");
-                    error!("{e}");
-                    return Err(e);
-                }
+            if let Some(tag) = tags.iter().find(|t| t.starts_with(&tag)) {
+                url.push_str("/category/");
+                url.push_str(tag);
+            } else {
+                let e = anyhow!("Tag not found");
+                error!("{e}");
+                return Err(e);
             }
         }
 
-        Scraper::scrape(path, &url, backstep.unwrap_or(0)).await
+        Self::scrape(path, &url, backstep.unwrap_or(0)).await
     }
 }

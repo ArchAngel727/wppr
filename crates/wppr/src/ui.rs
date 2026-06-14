@@ -136,12 +136,9 @@ impl<'a> Ui<'a> {
                             let img_args = if let Some(args) = img_args {
                                 args
                             } else {
-                                let local_images = Scraper::scrape_loacl_images(
-                                    &self.config.save_dir,
-                                    &None,
-                                    &None,
-                                )
-                                .await?;
+                                let local_images =
+                                    Scraper::scrape_loacl_images(&self.config.save_dir, None, None)
+                                        .await?;
 
                                 ImageProcessorArgs::from_local_images(local_images)
                             };
@@ -153,7 +150,7 @@ impl<'a> Ui<'a> {
                             ));
                         }
                         _ => unreachable!("selected can only be 0 or 1"),
-                    };
+                    }
 
                     Ok(EventResult::Exit(None))
                 }
@@ -198,7 +195,7 @@ impl<'a> Ui<'a> {
     }
 }
 
-impl<'a> Drop for Ui<'a> {
+impl Drop for Ui<'_> {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
         let _ = execute!(

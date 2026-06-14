@@ -8,14 +8,14 @@ pub struct ImageBuffer {
 }
 
 impl ImageBuffer {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             protocols: Vec::new(),
             local_images: Vec::new(),
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         if self.protocols.len() == self.local_images.len() {
             self.protocols.len()
         } else {

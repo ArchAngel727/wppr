@@ -20,7 +20,7 @@ pub enum StartEvent {
 }
 
 impl Start {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { selected: 0 }
     }
 
@@ -79,7 +79,7 @@ impl Start {
             KeyCode::Tab => self.selected = (self.selected + 1) % 2,
             KeyCode::Enter => return StartEvent::Exit(Some(self.selected)),
             _ => {}
-        };
+        }
 
         StartEvent::Continue
     }

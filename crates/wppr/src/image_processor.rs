@@ -18,14 +18,14 @@ pub struct ImageProcessorArgs {
 }
 
 impl ImageProcessorArgs {
-    pub fn from_path(path: PathBuf) -> Self {
+    pub const fn from_path(path: PathBuf) -> Self {
         Self {
             path: Some(path),
             local_images: None,
         }
     }
 
-    pub fn from_local_images(vec: Vec<LocalImage>) -> Self {
+    pub const fn from_local_images(vec: Vec<LocalImage>) -> Self {
         Self {
             path: None,
             local_images: Some(vec),
@@ -67,16 +67,12 @@ impl ImageProcessor {
             };
 
             while let Ok(Some(entry)) = entries.next_entry().await {
-                let metadata = match entry.metadata().await {
-                    Ok(metadata) => metadata,
-                    _ => continue,
+                let Ok(metadata) = entry.metadata().await else {
+                    continue;
                 };
 
-                let date: DateTime<Utc> = metadata
-                    .modified()
-                    .ok()
-                    .map(DateTime::from)
-                    .unwrap_or(Utc::now());
+                let date: DateTime<Utc> =
+                    metadata.modified().ok().map_or(Utc::now(), DateTime::from);
 
                 let local_image = LocalImage::from((entry.path(), date));
 

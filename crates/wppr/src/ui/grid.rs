@@ -29,7 +29,7 @@ impl<'a> Grid<'a> {
     }
 }
 
-impl<'a> StatefulWidget for Grid<'a> {
+impl StatefulWidget for Grid<'_> {
     type State = GridState;
 
     fn render(
@@ -80,7 +80,7 @@ impl<'a> StatefulWidget for Grid<'a> {
 }
 
 impl GridState {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             item_count: 0,
             cells_in_row: 0,
@@ -90,28 +90,28 @@ impl GridState {
         }
     }
 
-    pub fn select(&mut self, sel: usize) {
-        self.selected = Some(sel)
+    pub const fn select(&mut self, sel: usize) {
+        self.selected = Some(sel);
     }
 
-    pub fn set_offset(&mut self, off: usize) {
-        self.offset = off
+    pub const fn set_offset(&mut self, off: usize) {
+        self.offset = off;
     }
 
-    pub fn selected(&self) -> Option<usize> {
+    pub const fn selected(&self) -> Option<usize> {
         self.selected
     }
 
-    pub fn update_item_count(&mut self, count: usize) {
+    pub const fn update_item_count(&mut self, count: usize) {
         self.item_count = count;
     }
 
-    pub fn update_size(&mut self, area: &Size, cell_size: &Size) {
+    pub const fn update_size(&mut self, area: Size, cell_size: Size) {
         self.cells_in_row = (area.width / cell_size.width) as usize;
         self.cells_in_column = (area.height / cell_size.height) as usize;
     }
 
-    pub fn move_up(&mut self) {
+    pub const fn move_up(&mut self) {
         if let Some(selected) = self.selected
             && selected >= self.cells_in_row
         {
@@ -125,7 +125,7 @@ impl GridState {
         }
     }
 
-    pub fn move_down(&mut self) {
+    pub const fn move_down(&mut self) {
         if let Some(selected) = self.selected
             && selected + self.cells_in_row < self.item_count
         {
@@ -141,7 +141,7 @@ impl GridState {
         }
     }
 
-    pub fn move_left(&mut self) {
+    pub const fn move_left(&mut self) {
         if let Some(selected) = self.selected
             && selected > 0
         {
@@ -149,7 +149,7 @@ impl GridState {
         }
     }
 
-    pub fn move_right(&mut self) {
+    pub const fn move_right(&mut self) {
         if let Some(selected) = self.selected
             && selected + 1 < self.item_count
         {

@@ -1,6 +1,6 @@
 use crate::local_image::LocalImage;
 
-pub(crate) enum UiResult {
+pub enum UiResult {
     Selected(LocalImage),
     Cancelled,
 }

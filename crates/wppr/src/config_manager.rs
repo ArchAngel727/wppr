@@ -45,20 +45,20 @@ impl ConfigManager {
                 .inspect_err(|e| error!("Failed to create config dir: {e:#}"))?;
         }
 
-        if !path.exists() {
-            let mut file = File::create(path)?;
-            file.write_all(default_config.as_bytes())
-                .inspect_err(|e| error!("Failed to write config: {e:#}"))?;
-
-            Ok(serde_json::from_str(default_config)
-                .inspect_err(|e| error!("Failed to parse default config as json: {e:#}"))?)
-        } else {
+        if path.exists() {
             Ok(serde_json::from_str(
                 fs::read_to_string(path)
                     .inspect_err(|e| error!("Failed to read config: {e:#}"))?
                     .as_str(),
             )
             .inspect_err(|e| error!("Failed to parse config as json: {e:#}"))?)
+        } else {
+            let mut file = File::create(path)?;
+            file.write_all(default_config.as_bytes())
+                .inspect_err(|e| error!("Failed to write config: {e:#}"))?;
+
+            Ok(serde_json::from_str(default_config)
+                .inspect_err(|e| error!("Failed to parse default config as json: {e:#}"))?)
         }
     }
 }

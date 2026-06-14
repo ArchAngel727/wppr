@@ -11,7 +11,7 @@ pub struct UiState {
 }
 
 impl UiState {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             screen: Screen::Start,
             start: Start::new(),
