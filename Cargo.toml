@@ -7,4 +7,16 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
-anyhow = "1.0.102"
+anyhow = { version = "1.0.102", default-features = false }
+tracing = { version = "0.1.44", default-features = false }
+tracing-appender = { version = "0.2.5", default-features = false }
+tracing-subscriber = {
+  version = "0.3.23",
+  default-features = false,
+  features = ["env-filter"]
+}
+
+[profile.release]
+opt-level = "s"
+strip = "symbols"
+lto = true

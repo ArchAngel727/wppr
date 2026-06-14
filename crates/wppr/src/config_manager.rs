@@ -1,12 +1,12 @@
-use crate::app::App;
-use crate::config::Config;
+use crate::{app::App, config::OptionConfig};
 
 use anyhow::Result;
 use std::{
-    fs::{self as stdfs, File},
+    fs::{self, File},
     io::Write,
     path::Path,
 };
+use tracing::error;
 
 pub struct ConfigManager {}
 
@@ -15,35 +15,51 @@ impl ConfigManager {
         if !app.config_path.exists()
             && let Some(dir) = app.config_path.parent()
         {
-            stdfs::create_dir_all(dir)?;
+            fs::create_dir_all(dir)
+                .inspect_err(|e| error!("Failed to create config dir: {e:#}"))?;
         }
 
-        let mut file = File::create(app.config_path)?;
-        file.write_all(&serde_json::to_vec_pretty(&app.config)?)?;
+        let mut file = File::create(app.config_path)
+            .inspect_err(|e| error!("Failed to create config file: {e:#}"))?;
+        file.write_all(
+            &serde_json::to_vec_pretty(&app.config)
+                .inspect_err(|e| error!("Failed to parse json: {e:#}"))?,
+        )
+        .inspect_err(|e| error!("Failed to write config file: {e:#}"))?;
 
         Ok(())
     }
 
-    pub fn load_config(path: &Path) -> Result<Config> {
+    pub fn load_config(path: &Path) -> Result<OptionConfig> {
         let default_config = r#"{
         "current_wallpaper": "",
         "current_dir": "",
-        "save_dir": ""
+        "save_dir": "",
+        "cell_size": 0
     }"#;
 
         if let Some(dir) = path.parent()
             && !dir.exists()
         {
-            stdfs::create_dir_all(dir)?;
+            fs::create_dir_all(dir)
+                .inspect_err(|e| error!("Failed to create config dir: {e:#}"))?;
         }
 
-        if !path.exists() {
-            let mut file = File::create(path)?;
-            file.write_all(default_config.as_bytes())?;
+        if path.exists() {
+            let str =
+                fs::read_to_string(path).inspect_err(|e| error!("Failed to read config: {e:#}"))?;
 
-            Ok(serde_json::from_str(default_config)?)
+            let option_config: OptionConfig = serde_json::from_str(&str)
+                .inspect_err(|e| error!("Failed to parse config as json: {e:#}"))?;
+
+            Ok(option_config)
         } else {
-            Ok(serde_json::from_str(stdfs::read_to_string(path)?.as_str())?)
+            let mut file = File::create(path)?;
+            file.write_all(default_config.as_bytes())
+                .inspect_err(|e| error!("Failed to write config: {e:#}"))?;
+
+            Ok(serde_json::from_str(default_config)
+                .inspect_err(|e| error!("Failed to parse default config as json: {e:#}"))?)
         }
     }
 }

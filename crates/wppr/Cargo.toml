@@ -10,6 +10,9 @@ matugen = { path = "../matugen" }
 wayle = { path = "../wayle" }
 
 anyhow.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
 
 async-stream = { version = "0.3.6", default-features = false }
 chrono = {
@@ -23,6 +26,7 @@ crossterm = {
   default-features = false,
   features = ["event-stream"]
 }
+dirs = { version = "6.0.0", default-features = false }
 futures = { version = "0.3.32", default-features = false, features = ["std"] }
 home = "0.5.12"
 image = "0.25.10"

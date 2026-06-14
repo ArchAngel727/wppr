@@ -1,37 +1,43 @@
-use anyhow::{Result, anyhow};
-use chrono::{DateTime, Utc};
-use crossterm::event::{Event, EventStream};
-use futures::StreamExt;
-use image::{DynamicImage, ImageReader};
-use ratatui::{
-    Terminal,
-    crossterm::{
-        event::{DisableMouseCapture, EnableMouseCapture, KeyCode},
-        execute,
-        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-    },
-    layout::Size,
-    prelude::CrosstermBackend,
+pub mod event;
+mod grid;
+pub mod screen;
+mod ui_state;
+
+use anyhow::Result;
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture, EventStream},
+    execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
-use std::{
-    io::{Stdout, stdout},
-    path::{Path, PathBuf},
-};
-use tokio::{fs, select, sync::mpsc};
+use ratatui::{Frame, Terminal, prelude::CrosstermBackend};
+use ratatui_image::picker::Picker;
+use std::io::{Stdout, stdout};
+use tracing::{error, info};
 
 use crate::{
-    grid::{Grid, GridState},
-    local_image::LocalImage,
+    config::{self, Config},
+    image_processor::ImageProcessorArgs,
+    scraper::Scraper,
+    ui::{
+        event::{EventResult, UiResult},
+        screen::{
+            MIN_SIZE, Screen, local_images::LocalImages, options::Options,
+            scrape_images::ScrapeImages,
+        },
+        ui_state::UiState,
+    },
 };
 
-pub struct Ui {
+pub struct Ui<'a> {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     picker: Option<Picker>,
+    state: UiState,
+    event_stream: EventStream,
+    config: &'a mut Config,
 }
 
-impl Ui {
-    pub fn new() -> Result<Self> {
+impl<'a> Ui<'a> {
+    pub fn new(config: &'a mut Config) -> Result<Self> {
         enable_raw_mode()?;
         execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
 
@@ -41,145 +47,209 @@ impl Ui {
         Ok(Self {
             terminal,
             picker: Some(picker),
+            state: UiState::new(),
+            event_stream: EventStream::new(),
+            config,
         })
     }
 
-    pub fn load_images_from_fs(path: PathBuf) -> mpsc::Receiver<LocalImage> {
-        let (tx, rx) = mpsc::channel::<LocalImage>(16);
+    pub async fn run(
+        &mut self,
+        screen: Option<Screen>,
+        img_args: Option<ImageProcessorArgs>,
+    ) -> Result<UiResult> {
+        self.terminal.clear()?;
 
-        tokio::spawn(async move {
-            let mut entries = match fs::read_dir(&path).await {
-                Ok(entries) => entries,
-                Err(e) => {
-                    eprintln!("read_dir {}: {}", path.display(), e);
-                    return;
-                }
-            };
-
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let metadata = match entry.metadata().await {
-                    Ok(metadata) => metadata,
-                    _ => continue,
-                };
-
-                let date: DateTime<Utc> = metadata
-                    .modified()
-                    .ok()
-                    .map(DateTime::from)
-                    .unwrap_or(Utc::now());
-
-                let local_image = LocalImage::from((entry.path(), date));
-
-                if tx.send(local_image).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        rx
-    }
-
-    fn load_images_from_file(
-        mut image_tx: mpsc::Receiver<LocalImage>,
-    ) -> mpsc::Receiver<Result<DynamicImage>> {
-        let (tx, rx) = mpsc::channel::<Result<DynamicImage>>(16);
-
-        tokio::spawn(async move {
-            while let Some(image) = image_tx.recv().await {
-                let tx = tx.clone();
-
-                tokio::task::spawn_blocking(move || {
-                    let result = (|| -> Result<DynamicImage> {
-                        ImageReader::open(&image.path)?
-                            .with_guessed_format()?
-                            .decode()
-                            .map_err(|e| anyhow!("decode {}: {}", image.path.display(), e))
-                    })();
-
-                    let _ = tx.blocking_send(result);
-                });
-            }
-        });
-
-        rx
-    }
-
-    fn create_protocol_from_image(
-        mut image_tx: mpsc::Receiver<Result<DynamicImage>>,
-        picker: Picker,
-    ) -> mpsc::Receiver<Result<StatefulProtocol>> {
-        let (tx, rx) = mpsc::channel::<Result<StatefulProtocol>>(16);
-
-        tokio::spawn(async move {
-            while let Some(image) = image_tx.recv().await {
-                let tx = tx.clone();
-                let picker = picker.clone();
-
-                tokio::task::spawn_blocking(move || {
-                    let result = (|| -> Result<StatefulProtocol> {
-                        let image = image?;
-
-                        Ok(picker.new_resize_protocol(image))
-                    })();
-
-                    let _ = tx.blocking_send(result);
-                });
-            }
-        });
-
-        rx
-    }
-
-    pub async fn draw_grid(&mut self, path: &Path) -> Result<()> {
-        // let cell_size = Size::new(31, 10);
-        let cell_size = Size::new(20, 7);
-        let mut grid_state = GridState::new();
-        let mut events = EventStream::new();
-        let mut protocols: Vec<StatefulProtocol> = Vec::new();
-
-        let local_image_rx = Ui::load_images_from_fs(path.to_path_buf());
-        let dynamic_image_rx = Ui::load_images_from_file(local_image_rx);
-        let mut protocol_rx = Ui::create_protocol_from_image(
-            dynamic_image_rx,
-            self.picker.take().expect("Picker already taken"),
-        );
+        if let Some(screen) = screen {
+            self.state.screen = screen;
+        }
 
         loop {
-            let _ = self.terminal.draw(|frame| {
-                let protocol_count = protocols.len();
-                let grid = Grid::new(&mut protocols, cell_size);
+            self.terminal
+                .draw(|frame| Self::draw_screen(frame, &mut self.state))?;
 
-                grid_state.update_item_count(protocol_count);
-                grid_state.update_size(&frame.area().as_size(), &cell_size);
+            match self.handle_events(img_args.clone()).await {
+                Ok(event_result) => match event_result {
+                    EventResult::Continue => {}
+                    EventResult::Exit(ui_result) => {
+                        let Some(ui_result) = ui_result else { continue };
 
-                frame.render_stateful_widget(grid, frame.area(), &mut grid_state);
-            });
-
-            select! {
-                Some(maybe_event) = events.next() => {
-                    if let Ok(Event::Key(key)) = maybe_event {
-                        match key.code {
-                            KeyCode::Char('q') => break,
-                            KeyCode::Char('h') => grid_state.move_left(),
-                            KeyCode::Char('j') => grid_state.move_down(),
-                            KeyCode::Char('k') => grid_state.move_up(),
-                            KeyCode::Char('l') => grid_state.move_right(),
-                            _ => {},
-                        }
+                        return Ok(ui_result);
                     }
-                }
-
-                Some(maybe_protocol) = protocol_rx.recv() => {
-                    if let Ok(protocol) = maybe_protocol { protocols.push(protocol) }
+                    EventResult::Cancel => return Ok(UiResult::Cancelled),
+                },
+                Err(e) => {
+                    error!("{e:#}");
+                    return Err(e);
                 }
             }
         }
+    }
 
-        Ok(())
+    fn draw_screen(frame: &mut Frame, state: &mut UiState) {
+        let frame_size = frame.area();
+
+        if frame_size.width < MIN_SIZE.width || frame_size.height < MIN_SIZE.height {
+            state.prev_screen = Some(state.screen);
+            state.screen = Screen::TooSmall;
+        } else if let Some(prev_screen) = state.prev_screen {
+            state.screen = prev_screen;
+            state.prev_screen = None;
+        }
+
+        match state.screen {
+            Screen::Start => state.start.draw(frame),
+            Screen::LocalImages => {
+                if let Some(screen) = &mut state.local_images {
+                    screen.draw(frame);
+                }
+            }
+            Screen::ScrapeImages => {
+                if let Some(screen) = &mut state.scrape_images {
+                    screen.draw(frame);
+                }
+            }
+            Screen::TooSmall => state.too_small.draw(frame),
+            Screen::Options => {
+                if let Some(screen) = &mut state.options {
+                    screen.draw(frame);
+                }
+            }
+        }
+    }
+
+    async fn handle_events(&mut self, img_args: Option<ImageProcessorArgs>) -> Result<EventResult> {
+        match self.state.screen {
+            Screen::Start => match self.state.start.event(&mut self.event_stream).await {
+                screen::start::StartEvent::Continue => Ok(EventResult::Continue),
+                screen::start::StartEvent::Exit(Some(selected)) => {
+                    #[cfg(debug_assertions)]
+                    info!("Selected: {selected}");
+
+                    match selected {
+                        0 => {
+                            let img_args = if let Some(args) = img_args {
+                                args
+                            } else {
+                                ImageProcessorArgs::from_path(self.config.save_dir.clone())
+                            };
+
+                            self.state.screen = Screen::LocalImages;
+                            self.state.local_images = Some(LocalImages::new(
+                                self.picker.take().expect("Picker already taken"),
+                                img_args,
+                                config::CELL_SIZE[self.config.cell_size],
+                            ));
+                        }
+                        1 => {
+                            let img_args = if let Some(args) = img_args {
+                                args
+                            } else {
+                                let local_images =
+                                    Scraper::scrape_loacl_images(&self.config.save_dir, None, None)
+                                        .await?;
+
+                                ImageProcessorArgs::from_local_images(local_images)
+                            };
+
+                            self.state.screen = Screen::ScrapeImages;
+                            self.state.scrape_images = Some(ScrapeImages::new(
+                                self.picker.take().expect("Picker already taken"),
+                                img_args,
+                                config::CELL_SIZE[self.config.cell_size],
+                            ));
+                        }
+                        2 => {
+                            self.state.screen = Screen::Options;
+                            self.state.options = Some(Options::new(self.config.cell_size));
+                        }
+                        _ => unreachable!("selected can only be between 0 and 2 inclusive"),
+                    }
+
+                    Ok(EventResult::Exit(None))
+                }
+                screen::start::StartEvent::Exit(None) => Ok(EventResult::Cancel),
+            },
+
+            Screen::LocalImages => {
+                let Some(local_images_screen) = &mut self.state.local_images else {
+                    return Ok(EventResult::Continue);
+                };
+
+                match local_images_screen.event(&mut self.event_stream).await? {
+                    screen::local_images::LocalImagesEvent::Continue => Ok(EventResult::Continue),
+                    screen::local_images::LocalImagesEvent::Exit(Some(local_image)) => {
+                        Ok(EventResult::Exit(Some(UiResult::Selected(local_image))))
+                    }
+                    screen::local_images::LocalImagesEvent::Exit(None) => {
+                        Ok(EventResult::Exit(Some(UiResult::Cancelled)))
+                    }
+                }
+            }
+
+            Screen::ScrapeImages => {
+                let Some(scrape_images_screen) = &mut self.state.scrape_images else {
+                    return Ok(EventResult::Continue);
+                };
+
+                match scrape_images_screen.event(&mut self.event_stream).await? {
+                    screen::scrape_images::ScrapeImagesEvent::Continue => Ok(EventResult::Continue),
+                    screen::scrape_images::ScrapeImagesEvent::Exit(Some(local_image)) => {
+                        Ok(EventResult::Exit(Some(UiResult::Selected(local_image))))
+                    }
+                    screen::scrape_images::ScrapeImagesEvent::Exit(None) => {
+                        Ok(EventResult::Exit(Some(UiResult::Cancelled)))
+                    }
+                }
+            }
+
+            Screen::TooSmall => match self.state.too_small.event(&mut self.event_stream).await? {
+                screen::too_small::TooSmallEvent::Continue => Ok(EventResult::Continue),
+                screen::too_small::TooSmallEvent::Exit => {
+                    Ok(EventResult::Exit(Some(UiResult::Cancelled)))
+                }
+            },
+            Screen::Options => {
+                let Some(options_screen) = &mut self.state.options else {
+                    return Ok(EventResult::Continue);
+                };
+
+                match options_screen.event(&mut self.event_stream).await {
+                    screen::options::OptionsEvent::Continue => Ok(EventResult::Continue),
+                    screen::options::OptionsEvent::Back => {
+                        self.go_back(Screen::Start);
+
+                        Ok(EventResult::Continue)
+                    }
+                    screen::options::OptionsEvent::Exit(Some(selected)) => {
+                        #[cfg(debug_assertions)]
+                        info!("Selected cell size: {}", selected);
+
+                        self.config.cell_size = selected;
+                        self.go_back(Screen::Start);
+
+                        Ok(EventResult::Continue)
+                    }
+                    screen::options::OptionsEvent::Exit(None) => {
+                        Ok(EventResult::Exit(Some(UiResult::Cancelled)))
+                    }
+                }
+            }
+        }
+    }
+
+    fn go_back(&mut self, screen: Screen) {
+        self.state.screen = if let Some(prev_screen) = self.state.prev_screen {
+            prev_screen
+        } else {
+            screen
+        };
+
+        self.state.prev_screen = None;
     }
 }
 
-impl Drop for Ui {
+impl Drop for Ui<'_> {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
         let _ = execute!(

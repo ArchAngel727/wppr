@@ -13,8 +13,8 @@ pub struct Grid<'a> {
 
 pub struct GridState {
     item_count: usize,
-    row_count: usize,
-    column_count: usize,
+    cells_in_row: usize,
+    cells_in_column: usize,
     offset: usize,
     selected: Option<usize>,
 }
@@ -29,7 +29,7 @@ impl<'a> Grid<'a> {
     }
 }
 
-impl<'a> StatefulWidget for Grid<'a> {
+impl StatefulWidget for Grid<'_> {
     type State = GridState;
 
     fn render(
@@ -55,7 +55,7 @@ impl<'a> StatefulWidget for Grid<'a> {
             .collect();
 
         for (i, cell) in cells.iter().enumerate() {
-            let index = i + (state.offset * state.column_count);
+            let index = i + (state.offset * state.cells_in_row);
 
             if index >= self.items.len() {
                 break;
@@ -80,55 +80,68 @@ impl<'a> StatefulWidget for Grid<'a> {
 }
 
 impl GridState {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             item_count: 0,
-            row_count: 0,
-            column_count: 0,
+            cells_in_row: 0,
+            cells_in_column: 0,
             offset: 0,
             selected: Some(0),
         }
     }
 
-    pub fn update_item_count(&mut self, count: usize) {
+    pub const fn select(&mut self, sel: usize) {
+        self.selected = Some(sel);
+    }
+
+    pub const fn set_offset(&mut self, off: usize) {
+        self.offset = off;
+    }
+
+    pub const fn selected(&self) -> Option<usize> {
+        self.selected
+    }
+
+    pub const fn update_item_count(&mut self, count: usize) {
         self.item_count = count;
     }
 
-    pub fn update_size(&mut self, area: &Size, cell_size: &Size) {
-        self.column_count = (area.width / cell_size.width) as usize;
-        self.row_count = (area.height / cell_size.height) as usize;
+    pub const fn update_size(&mut self, area: Size, cell_size: Size) {
+        self.cells_in_row = (area.width / cell_size.width) as usize;
+        self.cells_in_column = (area.height / cell_size.height) as usize;
     }
 
-    pub fn move_up(&mut self) {
+    pub const fn move_up(&mut self) {
         if let Some(selected) = self.selected
-            && selected >= self.column_count
+            && selected >= self.cells_in_row
         {
-            self.selected = Some(selected - self.column_count);
+            self.selected = Some(selected - self.cells_in_row);
 
             if let Some(selected) = self.selected
-                && selected < self.offset * self.column_count
+                && selected < self.offset * self.cells_in_row
             {
                 self.offset -= 1;
             }
         }
     }
 
-    pub fn move_down(&mut self) {
+    pub const fn move_down(&mut self) {
         if let Some(selected) = self.selected
-            && selected + self.column_count < self.item_count
+            && selected + self.cells_in_row < self.item_count
         {
-            self.selected = Some(selected + self.column_count);
+            self.selected = Some(selected + self.cells_in_row);
 
             if let Some(selected) = self.selected
                 && selected
-                    > (self.offset * self.column_count + self.row_count * self.column_count) - 1
+                    > (self.offset * self.cells_in_row) + (self.cells_in_row * self.cells_in_column)
+                        - 1
             {
                 self.offset += 1;
             }
         }
     }
 
-    pub fn move_left(&mut self) {
+    pub const fn move_left(&mut self) {
         if let Some(selected) = self.selected
             && selected > 0
         {
@@ -136,7 +149,7 @@ impl GridState {
         }
     }
 
-    pub fn move_right(&mut self) {
+    pub const fn move_right(&mut self) {
         if let Some(selected) = self.selected
             && selected + 1 < self.item_count
         {

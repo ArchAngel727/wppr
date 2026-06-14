@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[derive(PartialOrd, PartialEq, Eq, Clone, Debug)]
+#[derive(PartialOrd, PartialEq, Eq, Clone)]
 pub struct LocalImage {
     pub path: PathBuf,
     pub date: DateTime<Utc>,
