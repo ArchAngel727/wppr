@@ -69,7 +69,7 @@ impl ScrapeImages {
                 match event {
                     Ok(event) => {
                         match event {
-                            Event::Key(key) => self.match_key(key.code),
+                            Event::Key(key) => Ok(self.match_key(key.code)),
                             Event::Resize(_, _) => {
                                 self.grid_state.select(0);
                                 self.grid_state.set_offset(0);
@@ -100,24 +100,24 @@ impl ScrapeImages {
         }
     }
 
-    fn match_key(&mut self, key: KeyCode) -> Result<ScrapeImagesEvent> {
+    fn match_key(&mut self, key: KeyCode) -> ScrapeImagesEvent {
         match key {
-            KeyCode::Char('q') => return Ok(ScrapeImagesEvent::Exit(None)),
+            KeyCode::Char('q') => return ScrapeImagesEvent::Exit(None),
             KeyCode::Char('h') | KeyCode::Left => self.grid_state.move_left(),
             KeyCode::Char('j') | KeyCode::Down => self.grid_state.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.grid_state.move_up(),
             KeyCode::Char('l') | KeyCode::Right => self.grid_state.move_right(),
             KeyCode::Enter => {
                 if let Some(index) = self.grid_state.selected() {
-                    return Ok(ScrapeImagesEvent::Exit(Some(
+                    return ScrapeImagesEvent::Exit(Some(
                         self.image_buffer.local_images[index].clone(),
-                    )));
+                    ));
                 }
-                return Ok(ScrapeImagesEvent::Exit(None));
+                return ScrapeImagesEvent::Exit(None);
             }
             _ => {}
         }
 
-        Ok(ScrapeImagesEvent::Continue)
+        ScrapeImagesEvent::Continue
     }
 }

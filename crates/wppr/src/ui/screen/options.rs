@@ -93,9 +93,9 @@ impl Options {
             KeyCode::Tab => self.selected = (self.selected + 1) % 3,
             KeyCode::BackTab => {
                 if self.selected == 0 {
-                    self.selected = 2
+                    self.selected = 2;
                 } else {
-                    self.selected -= 1
+                    self.selected -= 1;
                 }
             }
             KeyCode::Enter => return OptionsEvent::Exit(Some(self.selected)),
