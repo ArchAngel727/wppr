@@ -1,6 +1,8 @@
+use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode};
 use futures::StreamExt;
 use ratatui::{Frame, widgets::Paragraph};
+use tracing::error;
 
 pub struct TooSmall {}
 
@@ -18,18 +20,21 @@ impl TooSmall {
         frame.render_widget(Paragraph::new("Too small"), frame.area());
     }
 
-    pub async fn event(&mut self, event_stream: &mut EventStream) -> TooSmallEvent {
+    pub async fn event(&mut self, event_stream: &mut EventStream) -> Result<TooSmallEvent> {
         match event_stream.next().await {
             Some(Ok(event)) => match event {
                 Event::Key(key) => match key.code {
-                    KeyCode::Char('q') => TooSmallEvent::Exit,
-                    _ => TooSmallEvent::Continue,
+                    KeyCode::Char('q') => Ok(TooSmallEvent::Exit),
+                    _ => Ok(TooSmallEvent::Continue),
                 },
-                Event::Resize(_, _) => TooSmallEvent::Continue,
-                _ => TooSmallEvent::Continue,
+                Event::Resize(_, _) => Ok(TooSmallEvent::Continue),
+                _ => Ok(TooSmallEvent::Continue),
             },
-            None => TooSmallEvent::Continue,
-            Some(Err(_)) => todo!(),
+            None => Ok(TooSmallEvent::Continue),
+            Some(Err(e)) => {
+                error!("{e:#}");
+                return Err(e.into());
+            }
         }
     }
 }

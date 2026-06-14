@@ -176,7 +176,7 @@ impl<'a> Ui<'a> {
                     return Ok(EventResult::Continue);
                 };
 
-                match local_images_screen.event(&mut self.event_stream).await {
+                match local_images_screen.event(&mut self.event_stream).await? {
                     screen::local_images::LocalImagesEvent::Continue => Ok(EventResult::Continue),
                     screen::local_images::LocalImagesEvent::Exit(Some(local_image)) => {
                         Ok(EventResult::Exit(Some(UiResult::Selected(local_image))))
@@ -192,7 +192,7 @@ impl<'a> Ui<'a> {
                     return Ok(EventResult::Continue);
                 };
 
-                match scrape_images_screen.event(&mut self.event_stream).await {
+                match scrape_images_screen.event(&mut self.event_stream).await? {
                     screen::scrape_images::ScrapeImagesEvent::Continue => Ok(EventResult::Continue),
                     screen::scrape_images::ScrapeImagesEvent::Exit(Some(local_image)) => {
                         Ok(EventResult::Exit(Some(UiResult::Selected(local_image))))
@@ -203,7 +203,7 @@ impl<'a> Ui<'a> {
                 }
             }
 
-            Screen::TooSmall => match self.state.too_small.event(&mut self.event_stream).await {
+            Screen::TooSmall => match self.state.too_small.event(&mut self.event_stream).await? {
                 screen::too_small::TooSmallEvent::Continue => Ok(EventResult::Continue),
                 screen::too_small::TooSmallEvent::Exit => {
                     Ok(EventResult::Exit(Some(UiResult::Cancelled)))

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode};
 use futures::StreamExt;
 use ratatui::{
@@ -62,7 +63,7 @@ impl ScrapeImages {
         );
     }
 
-    pub async fn event(&mut self, event_stream: &mut EventStream) -> ScrapeImagesEvent {
+    pub async fn event(&mut self, event_stream: &mut EventStream) -> Result<ScrapeImagesEvent> {
         tokio::select! {
             Some(event) = event_stream.next() => {
                 match event {
@@ -73,9 +74,9 @@ impl ScrapeImages {
                                 self.grid_state.select(0);
                                 self.grid_state.set_offset(0);
 
-                                ScrapeImagesEvent::Continue
+                                Ok(ScrapeImagesEvent::Continue)
                             }
-                            _ => ScrapeImagesEvent::Continue,
+                            _ => Ok(ScrapeImagesEvent::Continue),
                         }
                     }
                     Err(_) => todo!(),
@@ -91,29 +92,29 @@ impl ScrapeImages {
                     error!("Failed to load image: {}", local_image.path.display());
                 }
 
-                ScrapeImagesEvent::Continue
+                Ok(ScrapeImagesEvent::Continue)
             }
         }
     }
 
-    fn match_key(&mut self, key: KeyCode) -> ScrapeImagesEvent {
+    fn match_key(&mut self, key: KeyCode) -> Result<ScrapeImagesEvent> {
         match key {
-            KeyCode::Char('q') => return ScrapeImagesEvent::Exit(None),
+            KeyCode::Char('q') => return Ok(ScrapeImagesEvent::Exit(None)),
             KeyCode::Char('h') | KeyCode::Left => self.grid_state.move_left(),
             KeyCode::Char('j') | KeyCode::Down => self.grid_state.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.grid_state.move_up(),
             KeyCode::Char('l') | KeyCode::Right => self.grid_state.move_right(),
             KeyCode::Enter => {
                 if let Some(index) = self.grid_state.selected() {
-                    return ScrapeImagesEvent::Exit(Some(
+                    return Ok(ScrapeImagesEvent::Exit(Some(
                         self.image_buffer.local_images[index].clone(),
-                    ));
+                    )));
                 }
-                return ScrapeImagesEvent::Exit(None);
+                return Ok(ScrapeImagesEvent::Exit(None));
             }
             _ => {}
         }
 
-        ScrapeImagesEvent::Continue
+        Ok(ScrapeImagesEvent::Continue)
     }
 }
