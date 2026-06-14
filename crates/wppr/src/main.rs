@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod config_manager;
 mod image_buffer;
+mod image_processor;
 mod local_image;
 mod online_image;
 mod scraper;

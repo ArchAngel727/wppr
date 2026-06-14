@@ -1,4 +1,4 @@
-use crate::{app::App, local_image::LocalImage, online_image::OnlineImage};
+use crate::{local_image::LocalImage, online_image::OnlineImage};
 
 use anyhow::{Result, anyhow};
 use chrono::DateTime;
@@ -114,19 +114,18 @@ impl Scraper {
         Ok(links)
     }
 
-    pub async fn scrape(app: &App<'_>, url: &str, backstep: u32) -> Result<Vec<LocalImage>> {
+    pub async fn scrape(save_dir: &Path, url: &str, backstep: u32) -> Result<Vec<LocalImage>> {
         if !url.starts_with("http") {
             return Err(anyhow!("Invalid url"));
         }
 
-        let save_dir = app.config.save_dir.clone();
         let page = Scraper::download_page(url).await?;
         let links =
             &Scraper::scrape_links(&page).await?[backstep as usize..(4 + backstep) as usize];
 
         let futures: Vec<_> = links
             .iter()
-            .map(|link| Scraper::process_image(link, &save_dir))
+            .map(|link| Scraper::process_image(link, save_dir))
             .collect();
 
         let mut res: Vec<LocalImage> = join_all(futures)
@@ -169,5 +168,30 @@ impl Scraper {
         tags = tags.iter().map(|str| str.to_ascii_lowercase()).collect();
 
         Ok(tags)
+    }
+
+    pub async fn scrape_loacl_images(
+        path: &Path,
+        tag: &Option<String>,
+        backstep: &Option<u32>,
+    ) -> Result<Vec<LocalImage>> {
+        let mut url = String::from("https://wallpaper-a-day.com");
+        let tags = Scraper::scrape_tags().await?;
+
+        if let Some(tag) = tag {
+            match tags.iter().find(|t| t.starts_with(tag)) {
+                Some(tag) => {
+                    url.push_str("/category/");
+                    url.push_str(tag);
+                }
+                None => {
+                    let e = anyhow!("Tag not found");
+                    error!("{e}");
+                    return Err(e);
+                }
+            }
+        }
+
+        Scraper::scrape(path, &url, backstep.unwrap_or(0)).await
     }
 }

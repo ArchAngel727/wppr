@@ -90,6 +90,14 @@ impl GridState {
         }
     }
 
+    pub fn select(&mut self, sel: usize) {
+        self.selected = Some(sel)
+    }
+
+    pub fn set_offset(&mut self, off: usize) {
+        self.offset = off
+    }
+
     pub fn selected(&self) -> Option<usize> {
         self.selected
     }

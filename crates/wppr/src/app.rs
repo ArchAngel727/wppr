@@ -7,10 +7,9 @@ use tracing::{error, info};
 
 use crate::cli::Cli;
 use crate::config_manager::ConfigManager;
-use crate::local_image::LocalImage;
+use crate::image_processor::ImageProcessorArgs;
 use crate::scraper::Scraper;
-use crate::ui::StartMenuSelection;
-use crate::ui::{Ui, packet::Packet};
+use crate::ui::{Ui, event::UiResult, screen::Screen};
 use crate::{Config, cli};
 
 pub struct App<'a> {
@@ -66,106 +65,60 @@ impl<'a> App<'a> {
         Ok(())
     }
 
-    fn match_image(&mut self, image: &Option<LocalImage>) -> Result<()> {
-        match image {
-            Some(image) => {
-                self.config.current_wallpaper = image.path.clone();
+    fn match_ui_result(&mut self, selected: Result<UiResult>) -> Result<()> {
+        match selected.inspect_err(|e| error!("{e:#}"))? {
+            UiResult::Selected(local_image) => {
+                self.config.current_wallpaper = local_image.path.clone();
                 info!(
                     "Setting wallpaper {}",
                     self.config.current_wallpaper.display()
                 );
                 self.set_wallpaper().inspect_err(|e| error!("{e:#}"))?;
             }
-            None => {
-                #[cfg(debug_assertions)]
-                info!("No image was selected");
-            }
+            UiResult::Cancelled => {}
         }
 
         Ok(())
     }
 
-    async fn scrape_loacl_images(
-        &self,
-        tag: &Option<String>,
-        url: &mut String,
-        backstep: &Option<u32>,
-    ) -> Result<Vec<LocalImage>> {
-        let tags = Scraper::scrape_tags().await?;
-
-        if let Some(tag) = tag {
-            match tags.iter().find(|t| t.starts_with(tag)) {
-                Some(tag) => {
-                    url.push_str("/category/");
-                    url.push_str(tag);
-                }
-                None => {
-                    let e = anyhow!("Tag not found");
-                    error!("{e}");
-                    return Err(e);
-                }
-            }
-        }
-
-        Scraper::scrape(self, url, backstep.unwrap_or(0)).await
-    }
-
     pub async fn menu(&mut self) -> Result<()> {
-        let mut url = String::from("https://wallpaper-a-day.com");
         let mut ui = Ui::new(&self.config)?;
 
         match &self.args.command {
             None => {
-                let selected = ui.start_menu();
+                let result = ui.run(None, None).await;
 
-                match selected {
-                    Ok(Some(selected)) => match selected {
-                        StartMenuSelection::LocalImages => {
-                            let image = ui.picker_grid(None).await;
-                            drop(ui);
+                drop(ui);
 
-                            self.match_image(&image)?;
-                        }
-                        StartMenuSelection::ScrapeImages => {
-                            let scraped_local_images =
-                                self.scrape_loacl_images(&None, &mut url, &None).await?;
-
-                            let packet = Packet::from_img_vec(scraped_local_images);
-                            let image = ui.picker_grid(Some(packet)).await;
-                            drop(ui);
-
-                            self.match_image(&image)?;
-                        }
-                    },
-                    Ok(None) => info!("Nothing selected"),
-                    Err(e) => error!("{}", e),
-                }
+                self.match_ui_result(result)?;
             }
             Some(cli::Commands::Reload) => {
                 self.reload_wallpaper().inspect_err(|e| error!("{e:#}"))?
             }
             Some(cli::Commands::Pick) => {
-                let image = ui.picker_grid(None).await;
+                let args = ImageProcessorArgs::from_path(self.config.save_dir.clone());
+                let result = ui.run(Some(Screen::LocalImages), Some(args)).await;
+
                 drop(ui);
 
-                self.match_image(&image)?;
+                self.match_ui_result(result)?;
             }
             Some(cli::Commands::Scrape {
                 tag,
                 backstep,
                 pick,
             }) => {
-                let scraped_local_images = self
-                    .scrape_loacl_images(tag, &mut url, backstep)
-                    .await
-                    .inspect_err(|e| error!("{e:#}"))?;
+                let scraped_local_images =
+                    Scraper::scrape_loacl_images(&self.config.save_dir, tag, backstep)
+                        .await
+                        .inspect_err(|e| error!("{e:#}"))?;
 
                 if *pick {
-                    let packet = Packet::from_img_vec(scraped_local_images);
-                    let image = ui.picker_grid(Some(packet)).await;
+                    let args = ImageProcessorArgs::from_local_images(scraped_local_images);
+                    let result = ui.run(Some(Screen::ScrapeImages), Some(args)).await;
                     drop(ui);
 
-                    self.match_image(&image)?;
+                    self.match_ui_result(result)?;
                     return Ok(());
                 } else {
                     drop(ui);
