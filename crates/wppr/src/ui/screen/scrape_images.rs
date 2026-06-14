@@ -79,7 +79,10 @@ impl ScrapeImages {
                             _ => Ok(ScrapeImagesEvent::Continue),
                         }
                     }
-                    Err(_) => todo!(),
+                    Err(e) => {
+                        error!("{e:#}");
+                        Err(e.into())
+                    },
                 }
             }
 

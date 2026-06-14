@@ -81,7 +81,7 @@ impl LocalImages {
                     }
                     Err(e) => {
                         error!("{e:#}");
-                        return Err(e.into());
+                        Err(e.into())
                     },
                 }
             }

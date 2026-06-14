@@ -33,7 +33,7 @@ impl TooSmall {
             None => Ok(TooSmallEvent::Continue),
             Some(Err(e)) => {
                 error!("{e:#}");
-                return Err(e.into());
+                Err(e.into())
             }
         }
     }
