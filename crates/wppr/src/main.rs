@@ -76,3 +76,9 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+// TODO:
+// Add screen for adding dirs
+// Change config so that it can save dirs: Vec<PathBuf>
+// Add dirs picker Screen
+// Change main screen to go to dirs picker instead of img picker
