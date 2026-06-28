@@ -48,7 +48,7 @@ fn setup_log() -> WorkerGuard {
 async fn setup_db() -> Result<()> {
     let mut conn = DBManager::get_db_connection().await?;
 
-    sqlx::migrate!()
+    sqlx::migrate!("../../migrations/")
         .run(&mut conn)
         .await
         .inspect_err(|e| error!("{}", e))
