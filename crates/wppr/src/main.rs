@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod config;
 mod config_manager;
+mod db_manager;
 mod image_buffer;
 mod image_processor;
 mod local_image;
@@ -9,10 +10,10 @@ mod online_image;
 mod scraper;
 mod ui;
 
-use crate::app::App;
 use crate::cli::Cli;
 use crate::config::Config;
 use crate::config_manager::ConfigManager;
+use crate::{app::App, db_manager::DBManager};
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
@@ -44,11 +45,24 @@ fn setup_log() -> WorkerGuard {
     _guard
 }
 
+async fn setup_db() -> Result<()> {
+    let mut conn = DBManager::get_db_connection().await?;
+
+    sqlx::migrate!()
+        .run(&mut conn)
+        .await
+        .inspect_err(|e| error!("{}", e))
+        .expect("Failed to run database migration");
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let _guard = setup_log();
+    setup_db().await?;
 
     let home_dir = home::home_dir()
         .ok_or_else(|| anyhow!("home dir not found"))

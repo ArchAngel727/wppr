@@ -1,4 +1,4 @@
-use crate::{local_image::LocalImage, online_image::OnlineImage};
+use crate::{db_manager::DBManager, local_image::LocalImage, online_image::OnlineImage};
 
 use anyhow::{Result, anyhow};
 use chrono::DateTime;
@@ -27,15 +27,14 @@ impl Scraper {
         Ok(())
     }
 
-    async fn download_page(url: &str) -> Result<String> {
-        let mut str = String::new();
-
-        fs::read("./page.html")
-            .await?
-            .iter()
-            .for_each(|c| str.push(*c as char));
-
-        Ok(str)
+    async fn download_page(url: &str) -> Result<String, reqwest::Error> {
+        reqwest::get(url)
+            .await
+            .inspect_err(|e| error!("Get request failed: {e:#}"))?
+            .error_for_status()
+            .inspect_err(|e| error!("Get request status code: {e:#}"))?
+            .text()
+            .await
     }
 
     async fn download_image(url: &str) -> Result<Vec<u8>> {
@@ -60,14 +59,14 @@ impl Scraper {
                     acc
                 });
 
-        info!("{} {}", &name, &image.date);
-
         let path = PathBuf::from(save_dir).join(&name).with_extension("png");
 
         if !path.exists() {
             let img = Self::download_image(&image.link).await?;
             Self::save_file(save_dir, &path, &img).await?;
         }
+
+        info!("{}", &image.date);
 
         Ok((path, image.date).into())
     }
@@ -128,8 +127,7 @@ impl Scraper {
         }
 
         let page = Self::download_page(url).await?;
-        let links = &Self::scrape_links(&page)?;
-        // TODO: build db with dates and names
+        let links = &Self::scrape_links(&page)?[backstep as usize..(4 + backstep) as usize];
 
         let futures: Vec<_> = links
             .iter()
@@ -143,6 +141,8 @@ impl Scraper {
             .collect();
         res.sort_by_key(|k| k.date);
         res.reverse();
+
+        DBManager::write_local_images_to_db(&res).await?;
 
         Ok(res)
     }

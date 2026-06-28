@@ -4,8 +4,9 @@ use image::{DynamicImage, ImageReader};
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
 use std::path::PathBuf;
 use tokio::{fs, sync::mpsc};
+use tracing::error;
 
-use crate::local_image::LocalImage;
+use crate::{db_manager::DBManager, local_image::LocalImage};
 
 pub struct ImageProcessor {
     pub rx: mpsc::Receiver<(Result<StatefulProtocol>, LocalImage)>,
@@ -35,11 +36,43 @@ impl ImageProcessorArgs {
 
 impl ImageProcessor {
     pub fn new(picker: Picker, args: ImageProcessorArgs) -> Self {
-        let local_image_rx = Self::load_images_from_fs(args);
+        let local_image_rx = if args.path.is_some() {
+            Self::load_images_from_db(args)
+        } else {
+            Self::load_images_from_fs(args)
+        };
+
         let dynamic_image_rx = Self::load_images_from_file(local_image_rx);
         let protocol_rx = Self::create_protocol_from_image(dynamic_image_rx, picker);
 
         Self { rx: protocol_rx }
+    }
+
+    fn load_images_from_db(args: ImageProcessorArgs) -> mpsc::Receiver<LocalImage> {
+        let (tx, rx) = mpsc::channel::<LocalImage>(16);
+
+        tokio::spawn(async move {
+            let Some(path) = args.path else {
+                error!("Invalid path");
+                return;
+            };
+
+            let img_vec = match DBManager::read_local_images_from_db(&path).await {
+                Ok(vec) => vec,
+                Err(e) => {
+                    error!("{}", e);
+                    return;
+                }
+            };
+
+            for local_image in img_vec {
+                if tx.send(local_image).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        rx
     }
 
     fn load_images_from_fs(args: ImageProcessorArgs) -> mpsc::Receiver<LocalImage> {
@@ -61,7 +94,7 @@ impl ImageProcessor {
             let mut entries = match fs::read_dir(&path).await {
                 Ok(entries) => entries,
                 Err(e) => {
-                    eprintln!("read_dir {}: {}", path.display(), e);
+                    error!("read_dir {}: {}", path.display(), e);
                     return;
                 }
             };
