@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio::fs;
-use tracing::{error, info};
+use tracing::error;
 
 pub struct Scraper {}
 

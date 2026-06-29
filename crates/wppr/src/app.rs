@@ -8,11 +8,13 @@ use wayle::WayleController;
 #[cfg(feature = "hyprpanel")]
 use hyprpanel::{HyprpanelController, HyprpanelSocketStatus};
 
-use crate::cli::Cli;
-use crate::image_processor::ImageProcessorArgs;
-use crate::scraper::Scraper;
-use crate::ui::{Ui, event::UiResult, screen::Screen};
-use crate::{Config, cli};
+use crate::{
+    cli::Cli,
+    image_processor::ImageProcessorArgs,
+    scraper::Scraper,
+    ui::{Ui, event::UiResult, screen::Screen},
+    {Config, cli},
+};
 
 pub struct App<'a> {
     pub config_path: &'a Path,

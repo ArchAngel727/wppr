@@ -10,10 +10,12 @@ mod online_image;
 mod scraper;
 mod ui;
 
-use crate::cli::Cli;
-use crate::config::Config;
-use crate::config_manager::ConfigManager;
-use crate::{app::App, db_manager::DBManager};
+use crate::{
+    cli::Cli,
+    config::Config,
+    config_manager::ConfigManager,
+    {app::App, db_manager::DBManager},
+};
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
