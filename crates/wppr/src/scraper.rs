@@ -66,8 +66,6 @@ impl Scraper {
             Self::save_file(save_dir, &path, &img).await?;
         }
 
-        info!("{}", &image.date);
-
         Ok((path, image.date).into())
     }
 
