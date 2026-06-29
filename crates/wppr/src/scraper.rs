@@ -142,7 +142,7 @@ impl Scraper {
         res.sort_by_key(|k| k.date);
         res.reverse();
 
-        DBManager::write_local_images_to_db(&res).await?;
+        DBManager::write_local_images_to_db(&res, save_dir).await?;
 
         Ok(res)
     }

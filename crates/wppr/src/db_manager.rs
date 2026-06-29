@@ -34,10 +34,16 @@ impl DBManager {
         Ok(SqliteConnection::connect_with(&opts).await?)
     }
 
-    pub async fn write_local_images_to_db(slice: &[LocalImage]) -> Result<()> {
+    pub async fn write_local_images_to_db(slice: &[LocalImage], save_dir: &Path) -> Result<()> {
         let mut conn = DBManager::get_db_connection().await?;
+        let db_images = DBManager::read_local_images_from_db(save_dir).await?;
 
-        for img in slice {
+        let vec_no_dups: Vec<&LocalImage> = slice
+            .iter()
+            .filter(|img| !db_images.contains(img))
+            .collect();
+
+        for img in vec_no_dups {
             let name = if let Some(name) = img.path.file_name() {
                 match name.to_str() {
                     Some(str) => str,
@@ -47,7 +53,6 @@ impl DBManager {
                 continue;
             };
 
-            // TODO: crash or continue
             sqlx::query!(
                 "INSERT INTO local_images (name, timestamp) values (?1, ?2)",
                 name,
