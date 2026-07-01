@@ -32,19 +32,24 @@ impl<'a> App<'a> {
     }
 
     pub fn set_wallpaper(&self) -> Result<()> {
-        match AwwwController::check_daemon_status() {
-            AwwwSocketStatus::Running => {
-                AwwwController::set_wallpaper(&self.config.current_wallpaper)
-                    .inspect_err(|e| error!("{e:#}"))?;
-                MatugenController::update_colors(&self.config.current_wallpaper)
-                    .inspect_err(|e| error!("{e:#}"))?;
-            }
-            AwwwSocketStatus::NotRunning => {
-                if let Some(path) = self.config.current_wallpaper.to_str() {
-                    let _ = wallpaper::set_from_path(path);
-                }
-            }
+        if AwwwController::check_daemon_status() == AwwwSocketStatus::Running {
+            AwwwController::set_wallpaper(&self.config.current_wallpaper)
+                .inspect_err(|e| error!("{e:#}"))?;
+
+            self.update_colors()?;
+            return Ok(());
         }
+
+        if let Some(path) = self.config.current_wallpaper.to_str() {
+            let _ = wallpaper::set_from_path(path).inspect_err(|e| error!("{e:#}"));
+        }
+
+        Ok(())
+    }
+
+    fn update_colors(&self) -> Result<()> {
+        MatugenController::update_colors(&self.config.current_wallpaper)
+            .inspect_err(|e| error!("{e:#}"))?;
 
         #[cfg(feature = "hyprpanel")]
         match HyprpanelController::check_daemon_status() {

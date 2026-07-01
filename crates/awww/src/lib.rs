@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Result;
 
+#[derive(PartialEq)]
 pub enum AwwwSocketStatus {
     Running,
     NotRunning,
