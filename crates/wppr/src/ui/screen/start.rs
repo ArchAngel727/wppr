@@ -73,7 +73,7 @@ impl Start {
             KeyCode::Char('q') => return StartEvent::Exit(None),
             KeyCode::Char('h') | KeyCode::Left => self.selected = 0,
             KeyCode::Char('l') | KeyCode::Right => self.selected = 1,
-            KeyCode::Char('o') => return StartEvent::Exit(Some(2usize)),
+            KeyCode::Char('o') => return StartEvent::Exit(Some(2_usize)),
             KeyCode::Tab => self.selected = (self.selected + 1) % 2,
             KeyCode::Enter => return StartEvent::Exit(Some(self.selected)),
             _ => {}

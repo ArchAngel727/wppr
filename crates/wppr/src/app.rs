@@ -92,47 +92,42 @@ impl<'a> App<'a> {
 
     pub async fn menu(&mut self) -> Result<()> {
         let save_dir = self.config.save_dir.clone();
-        let mut ui = Ui::new(&mut self.config)?;
+        let mut config = self.config.clone();
 
         match &self.args.command {
             None => {
+                let mut ui = Ui::new(&mut config)?;
                 let result = ui.run(None, None).await;
 
-                drop(ui);
-
                 self.match_ui_result(result)?;
             }
+
             Some(cli::Commands::Reload) => {
-                drop(ui);
                 self.reload_wallpaper().inspect_err(|e| error!("{e:#}"))?;
             }
+
             Some(cli::Commands::Pick) => {
                 let args = ImageProcessorArgs::from_path(save_dir);
+                let mut ui = Ui::new(&mut config)?;
                 let result = ui.run(Some(Screen::LocalImages), Some(args)).await;
-
-                drop(ui);
 
                 self.match_ui_result(result)?;
             }
-            Some(cli::Commands::Scrape {
-                tag,
-                backstep,
-                pick,
-            }) => {
-                let scraped_local_images =
-                    Scraper::scrape_loacl_images(&save_dir, tag.clone(), *backstep)
-                        .await
-                        .inspect_err(|e| error!("{e:#}"))?;
+
+            Some(cli::Commands::Scrape { tag, pick }) => {
+                let scraped_local_images = Scraper::scrape_loacl_images(&save_dir, tag.clone())
+                    .await
+                    .inspect_err(|e| error!("{e:#}"))?;
 
                 if *pick {
                     let args = ImageProcessorArgs::from_local_images(scraped_local_images);
+                    let mut ui = Ui::new(&mut config)?;
                     let result = ui.run(Some(Screen::ScrapeImages), Some(args)).await;
-                    drop(ui);
 
                     self.match_ui_result(result)?;
                     return Ok(());
                 }
-                drop(ui);
+
                 self.config
                     .current_wallpaper
                     .clone_from(&scraped_local_images[0].path);

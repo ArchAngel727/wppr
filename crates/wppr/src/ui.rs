@@ -64,6 +64,45 @@ impl<'a> Ui<'a> {
         self.terminal.clear()?;
 
         if let Some(screen) = screen {
+            match screen {
+                Screen::Start => {}
+                Screen::TooSmall => unimplemented!("How"),
+
+                Screen::LocalImages => {
+                    let img_args = if let Some(ref img_args) = img_args {
+                        img_args.clone()
+                    } else {
+                        ImageProcessorArgs::from_path(self.config.save_dir.clone())
+                    };
+
+                    self.state.screen = Screen::LocalImages;
+                    self.state.local_images = Some(LocalImages::new(
+                        self.picker.take().expect("Picker already taken"),
+                        img_args,
+                        config::CELL_SIZE[self.config.cell_size],
+                    ));
+                }
+
+                Screen::ScrapeImages => {
+                    let img_args = if let Some(ref img_args) = img_args {
+                        img_args.clone()
+                    } else {
+                        let local_images =
+                            Scraper::scrape_loacl_images(&self.config.save_dir, None).await?;
+
+                        ImageProcessorArgs::from_local_images(local_images)
+                    };
+
+                    self.state.screen = Screen::ScrapeImages;
+                    self.state.scrape_images = Some(ScrapeImages::new(
+                        self.picker.take().expect("Picker already taken"),
+                        img_args,
+                        config::CELL_SIZE[self.config.cell_size],
+                    ));
+                }
+
+                Screen::Options => unimplemented!("Dont do this"),
+            }
             self.state.screen = screen;
         }
 
@@ -149,7 +188,7 @@ impl<'a> Ui<'a> {
                                 args
                             } else {
                                 let local_images =
-                                    Scraper::scrape_loacl_images(&self.config.save_dir, None, None)
+                                    Scraper::scrape_loacl_images(&self.config.save_dir, None)
                                         .await?;
 
                                 ImageProcessorArgs::from_local_images(local_images)

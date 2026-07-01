@@ -119,13 +119,13 @@ impl Scraper {
         Ok(links)
     }
 
-    pub async fn scrape(save_dir: &Path, url: &str, backstep: u32) -> Result<Vec<LocalImage>> {
+    pub async fn scrape(save_dir: &Path, url: &str) -> Result<Vec<LocalImage>> {
         if !url.starts_with("http") {
             return Err(anyhow!("Invalid url"));
         }
 
         let page = Self::download_page(url).await?;
-        let links = &Self::scrape_links(&page)?[backstep as usize..(4 + backstep) as usize];
+        let links = &Self::scrape_links(&page)?[..10];
 
         let futures: Vec<_> = links
             .iter()
@@ -176,11 +176,7 @@ impl Scraper {
         Ok(tags)
     }
 
-    pub async fn scrape_loacl_images(
-        path: &Path,
-        tag: Option<String>,
-        backstep: Option<u32>,
-    ) -> Result<Vec<LocalImage>> {
+    pub async fn scrape_loacl_images(path: &Path, tag: Option<String>) -> Result<Vec<LocalImage>> {
         let mut url = String::from("https://wallpaper-a-day.com");
         let tags = Self::scrape_tags().await?;
 
@@ -195,6 +191,6 @@ impl Scraper {
             }
         }
 
-        Self::scrape(path, &url, backstep.unwrap_or(0)).await
+        Self::scrape(path, &url).await
     }
 }

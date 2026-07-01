@@ -16,7 +16,7 @@ pub struct OptionConfig {
     pub cell_size: Option<usize>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     pub current_wallpaper: PathBuf,
     pub current_dir: PathBuf,
