@@ -5,7 +5,6 @@ edition.workspace = true
 
 [dependencies]
 awww = { path = "../awww" }
-hyprpanel = { path = "../hyprpanel", optional = true }
 matugen = { path = "../matugen" }
 wayle = { path = "../wayle" }
 
@@ -74,4 +73,3 @@ wallpaper = { version = "3.2.0", default-features = false }
 
 [features]
 default = []
-hyprpanel = ["dep:hyprpanel"]

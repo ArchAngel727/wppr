@@ -5,9 +5,6 @@ use std::path::Path;
 use tracing::{error, info};
 use wayle::WayleController;
 
-#[cfg(feature = "hyprpanel")]
-use hyprpanel::{HyprpanelController, HyprpanelSocketStatus};
-
 use crate::{
     cli::Cli,
     image_processor::ImageProcessorArgs,
@@ -50,15 +47,6 @@ impl<'a> App<'a> {
     fn update_colors(&self) -> Result<()> {
         MatugenController::update_colors(&self.config.current_wallpaper)
             .inspect_err(|e| error!("{e:#}"))?;
-
-        #[cfg(feature = "hyprpanel")]
-        match HyprpanelController::check_daemon_status() {
-            hyprpanel::HyprpanelSocketStatus::Running => {
-                HyprpanelController::set_wallpaper(&self.config.current_wallpaper)
-                    .inspect_err(|e| error!("{e:#}"))?;
-            }
-            HyprpanelSocketStatus::NotRunning => {}
-        }
 
         if WayleController::is_running() {
             WayleController::set_wallpaper(&self.config.current_wallpaper)?;

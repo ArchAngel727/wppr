@@ -1467,13 +1467,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyprpanel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
-]
-
-[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4554,7 +4547,6 @@ dependencies = [
  "dirs 6.0.0",
  "futures",
  "home",
- "hyprpanel",
  "image",
  "matugen",
  "ratatui",
