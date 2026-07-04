@@ -31,12 +31,18 @@ impl ConfigManager {
     }
 
     pub fn load_config(path: &Path) -> Result<OptionConfig> {
-        let default_config = r#"{
-        "current_wallpaper": "",
-        "current_dir": "",
-        "save_dir": "",
-        "cell_size": 0
-    }"#;
+        let default_config = concat!(
+            "{\n",
+            r#"    "current_wallpaper": "","#,
+            "\n",
+            r#"    "current_dir": "","#,
+            "\n",
+            r#"    "save_dir": "","#,
+            "\n",
+            r#"    "cell_size": 0"#,
+            "\n",
+            "}"
+        );
 
         if let Some(dir) = path.parent()
             && !dir.exists()

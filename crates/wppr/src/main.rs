@@ -71,8 +71,11 @@ async fn main() -> Result<()> {
         .inspect_err(|e| error!("{e:#}"))?;
 
     let config_path = PathBuf::from(format!("{}/.config/wppr/config.json", home_dir.display()));
-    let option_config =
-        ConfigManager::load_config(&config_path).inspect_err(|e| error!("{e:#}"))?;
+    let option_config = if cfg!(debug_assertions) {
+        ConfigManager::load_config(&PathBuf::from("./config.json"))?
+    } else {
+        ConfigManager::load_config(&config_path).inspect_err(|e| error!("{e:#}"))?
+    };
 
     let mut app = App::new(&config_path, option_config.into(), cli);
 
