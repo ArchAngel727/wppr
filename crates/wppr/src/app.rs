@@ -108,7 +108,7 @@ impl<'a> App<'a> {
             }
 
             Some(cli::Commands::Scrape { tag, pick }) => {
-                let scraped_local_images = Scraper::scrape_loacl_images(&save_dir, tag.clone())
+                let scraped_local_images = Scraper::scrape_local_images(&save_dir, tag.clone())
                     .await
                     .inspect_err(|e| error!("{e:#}"))?;
 

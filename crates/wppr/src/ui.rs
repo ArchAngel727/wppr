@@ -88,7 +88,7 @@ impl<'a> Ui<'a> {
                         img_args.clone()
                     } else {
                         let local_images =
-                            Scraper::scrape_loacl_images(&self.config.save_dir, None).await?;
+                            Scraper::scrape_local_images(&self.config.save_dir, None).await?;
 
                         ImageProcessorArgs::from_local_images(local_images)
                     };
@@ -188,7 +188,7 @@ impl<'a> Ui<'a> {
                                 args
                             } else {
                                 let local_images =
-                                    Scraper::scrape_loacl_images(&self.config.save_dir, None)
+                                    Scraper::scrape_local_images(&self.config.save_dir, None)
                                         .await?;
 
                                 ImageProcessorArgs::from_local_images(local_images)

@@ -176,7 +176,7 @@ impl Scraper {
         Ok(tags)
     }
 
-    pub async fn scrape_loacl_images(path: &Path, tag: Option<String>) -> Result<Vec<LocalImage>> {
+    pub async fn scrape_local_images(path: &Path, tag: Option<String>) -> Result<Vec<LocalImage>> {
         let mut url = String::from("https://wallpaper-a-day.com");
         let tags = Self::scrape_tags().await?;
 
