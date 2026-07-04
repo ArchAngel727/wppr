@@ -66,27 +66,33 @@ async fn main() -> Result<()> {
     let _guard = setup_log();
     setup_db().await?;
 
-    let home_dir = home::home_dir()
-        .ok_or_else(|| anyhow!("home dir not found"))
-        .inspect_err(|e| error!("{e:#}"))?;
-
-    let config_path = PathBuf::from(format!("{}/.config/wppr/config.json", home_dir.display()));
-    let option_config = if cfg!(debug_assertions) {
-        ConfigManager::load_config(&PathBuf::from("./config.json"))?
+    let config_path = if cfg!(debug_assertions) {
+        PathBuf::from("./config.json")
     } else {
-        ConfigManager::load_config(&config_path).inspect_err(|e| error!("{e:#}"))?
+        let mut path = dirs::config_dir()
+            .ok_or_else(|| anyhow!("config dir not found"))
+            .inspect_err(|e| error!("{e:#}"))?;
+        path.push("wppr/config.json");
+
+        path
     };
+
+    let option_config =
+        ConfigManager::load_config(&config_path).inspect_err(|e| error!("{e:#}"))?;
+
+    let mut picture_dir = dirs::picture_dir()
+        .ok_or_else(|| anyhow!("picture dir not found"))
+        .inspect_err(|e| error!("{e:#}"))?;
+    picture_dir.push("wppr/");
+
+    fs::create_dir_all(&picture_dir)
+        .await
+        .inspect_err(|e| error!("Failed to create save dir {e:#}"))?;
 
     let mut app = App::new(&config_path, option_config.into(), cli);
 
-    if !app.config.save_dir.exists() {
-        let dir_path = PathBuf::from(format!("{}/Pictures/wppr", home_dir.display()));
-
-        fs::create_dir_all(&dir_path)
-            .await
-            .inspect_err(|e| error!("Failed to create save dir {e:#}"))?;
-
-        app.config.save_dir = dir_path;
+    if app.config.save_dir.as_os_str() == "" {
+        app.config.save_dir = picture_dir;
     }
 
     app.menu().await.inspect_err(|e| error!("{e:#}"))?;

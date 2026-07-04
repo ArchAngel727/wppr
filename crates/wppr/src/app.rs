@@ -129,6 +129,8 @@ impl<'a> App<'a> {
             }
         }
 
+        self.config = config;
+
         Ok(())
     }
 }
