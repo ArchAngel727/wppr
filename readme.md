@@ -1,7 +1,7 @@
 # wppr
 Cross platform wallpaper scraper that downloads the latest wallpapers from [wallpaper a day](https://www.wallpaper-a-day.com).<br>
 Downloaded wallpapers are saved under `~/Pictures/wppr/`.<br>
-Logs are saved under `~/.cache/wppr/logs/`
+Logs are saved under `~/.cache/wppr/logs/`<br>
 Data is stored under `~/.local/share/wppr/`
 
 ### Dependencies
