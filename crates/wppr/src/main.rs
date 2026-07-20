@@ -19,6 +19,10 @@ use crate::{
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
+use crossterm::{
+    cursor, execute,
+    terminal::{LeaveAlternateScreen, disable_raw_mode},
+};
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::error;
@@ -47,6 +51,19 @@ fn setup_log() -> WorkerGuard {
     _guard
 }
 
+fn install_panic_hook() {
+    let original_hook = std::panic::take_hook();
+
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        error!("PANIC: {panic_info}\n{backtrace}");
+
+        let _ = disable_raw_mode();
+        let _ = execute!(std::io::stderr(), LeaveAlternateScreen, cursor::Show);
+        original_hook(panic_info);
+    }));
+}
+
 async fn setup_db() -> Result<()> {
     let mut conn = DBManager::get_db_connection().await?;
 
@@ -64,6 +81,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let _guard = setup_log();
+    install_panic_hook();
     setup_db().await?;
 
     let config_path = if cfg!(debug_assertions) {
