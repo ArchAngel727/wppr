@@ -24,7 +24,7 @@ use crate::{
     config::{self, Config},
     db_manager::DBManager,
     image_processor::ImageProcessor,
-    scraper::Scraper,
+    scraper::{Scraper, ScraperArgs},
     ui::{
         event::{EventResult, UiResult},
         screen::{
@@ -60,7 +60,12 @@ impl<'a> Ui<'a> {
         })
     }
 
-    pub async fn run(&mut self, screen: Option<Screen>, path: Option<PathBuf>) -> Result<UiResult> {
+    pub async fn run(
+        &mut self,
+        screen: Option<Screen>,
+        path: Option<PathBuf>,
+        scraper_args: Option<ScraperArgs<'_>>,
+    ) -> Result<UiResult> {
         self.terminal.clear()?;
 
         if let Some(screen) = screen {
@@ -95,7 +100,13 @@ impl<'a> Ui<'a> {
                     let img_processor =
                         ImageProcessor::new(self.picker.take().expect("Picker already taken"));
 
-                    let images = Scraper::scrape_images(&self.config.save_dir, None, None).await?;
+                    let args = if let Some(args) = scraper_args {
+                        args
+                    } else {
+                        ScraperArgs::new(&self.config.save_dir, None, None)
+                    };
+
+                    let images = Scraper::scrape_images(args).await?;
 
                     for image in images {
                         img_processor.push_image(image).await;
@@ -205,8 +216,8 @@ impl<'a> Ui<'a> {
                                 self.picker.take().expect("Picker already taken"),
                             );
 
-                            let images =
-                                Scraper::scrape_images(&self.config.save_dir, None, None).await?;
+                            let args = ScraperArgs::new(&self.config.save_dir, None, None);
+                            let images = Scraper::scrape_images(args).await?;
 
                             for image in images {
                                 img_processor.push_image(image).await;

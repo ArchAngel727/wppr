@@ -15,6 +15,18 @@ use tracing::error;
 
 pub struct Scraper {}
 
+pub struct ScraperArgs<'a> {
+    path: &'a Path,
+    tag: Option<String>,
+    count: Option<usize>,
+}
+
+impl<'a> ScraperArgs<'a> {
+    pub fn new(path: &'a Path, tag: Option<String>, count: Option<usize>) -> Self {
+        Self { path, tag, count }
+    }
+}
+
 impl Scraper {
     async fn save_file(dir: &Path, name: &Path, data: &[u8]) -> Result<()> {
         fs::create_dir_all(dir)
@@ -69,7 +81,7 @@ impl Scraper {
         Ok((path, image.date).into())
     }
 
-    pub fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
+    fn scrape_links(page: &str) -> Result<Vec<OnlineImage>> {
         let mut links: Vec<OnlineImage> = Vec::new();
         let regex = Regex::new(r"\/d\/(.*?)\/view")?;
 
@@ -119,11 +131,7 @@ impl Scraper {
         Ok(links)
     }
 
-    pub async fn scrape(
-        save_dir: &Path,
-        url: &str,
-        count: Option<usize>,
-    ) -> Result<Vec<LocalImage>> {
+    async fn scrape(save_dir: &Path, url: &str, count: Option<usize>) -> Result<Vec<LocalImage>> {
         if !url.starts_with("http") {
             return Err(anyhow!("Invalid url"));
         }
@@ -186,15 +194,11 @@ impl Scraper {
         Ok(tags)
     }
 
-    pub async fn scrape_images(
-        path: &Path,
-        tag: Option<String>,
-        count: Option<usize>,
-    ) -> Result<Vec<LocalImage>> {
+    pub async fn scrape_images(args: ScraperArgs<'_>) -> Result<Vec<LocalImage>> {
         let mut url = String::from("https://wallpaper-a-day.com");
         let tags = Self::scrape_tags().await?;
 
-        if let Some(tag) = tag {
+        if let Some(tag) = args.tag {
             if let Some(tag) = tags.iter().find(|t| t.starts_with(&tag)) {
                 url.push_str("/category/");
                 url.push_str(tag);
@@ -205,6 +209,6 @@ impl Scraper {
             }
         }
 
-        Self::scrape(path, &url, count).await
+        Self::scrape(args.path, &url, args.count).await
     }
 }

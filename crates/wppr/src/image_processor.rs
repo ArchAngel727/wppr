@@ -4,7 +4,7 @@ use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::error;
 
-use crate::{image_buffer::SharedImageBuffer, local_image::LocalImage};
+use crate::{local_image::LocalImage, shared_image_buffer::SharedImageBuffer};
 
 pub struct ImageProcessor {
     buffer: SharedImageBuffer,

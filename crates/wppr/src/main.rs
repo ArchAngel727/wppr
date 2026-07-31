@@ -8,6 +8,7 @@ mod image_processor;
 mod local_image;
 mod online_image;
 mod scraper;
+mod shared_image_buffer;
 mod ui;
 
 use crate::{

@@ -8,6 +8,7 @@ use wayle::WayleController;
 use crate::{
     Config,
     cli::{self, Cli},
+    scraper::{Scraper, ScraperArgs},
     ui::{Ui, event::UiResult, screen::Screen},
 };
 
@@ -88,7 +89,7 @@ impl<'a> App<'a> {
         match &self.args.command {
             None => {
                 let mut ui = Ui::new(&mut config)?;
-                let result = ui.run(None, None).await;
+                let result = ui.run(None, None, None).await;
 
                 self.match_ui_result(result)?;
             }
@@ -99,31 +100,30 @@ impl<'a> App<'a> {
 
             Some(cli::Commands::Pick) => {
                 let mut ui = Ui::new(&mut config)?;
-                let result = ui.run(Some(Screen::LocalImages), Some(save_dir)).await;
+                let result = ui
+                    .run(Some(Screen::LocalImages), Some(save_dir), None)
+                    .await;
 
                 self.match_ui_result(result)?;
             }
 
-            Some(cli::Commands::Scrape { tag: _, pick: _ }) => {} // TODO: reimplement tags
-                                                                  // {
-                                                                  //     let scraped_local_images =
-                                                                  //         Scraper::scrape_images(&save_dir, tag.clone(), Some(1)).await?;
-                                                                  //
-                                                                  //     if *pick {
-                                                                  //         let args = ImageProcessorArgs::from_local_images(scraped_local_images);
-                                                                  //         let mut ui = Ui::new(&mut config)?;
-                                                                  //         let result = ui.run(Some(Screen::ScrapeImages), Some(args)).await;
-                                                                  //
-                                                                  //         self.match_ui_result(result)?;
-                                                                  //         return Ok(());
-                                                                  //     }
-                                                                  //
-                                                                  //     self.config
-                                                                  //         .current_wallpaper
-                                                                  //         .clone_from(&scraped_local_images[0].path);
-                                                                  //
-                                                                  //     self.set_wallpaper()?;
-                                                                  // }
+            Some(cli::Commands::Scrape { tag, pick }) => {
+                if *pick {
+                    let args = ScraperArgs::new(&self.config.save_dir, tag.clone(), None);
+                    let mut ui = Ui::new(&mut config)?;
+                    let result = ui.run(Some(Screen::ScrapeImages), None, Some(args)).await;
+
+                    self.match_ui_result(result)?;
+                    return Ok(());
+                } else {
+                    let args = ScraperArgs::new(&self.config.save_dir, tag.clone(), Some(1));
+                    let image = Scraper::scrape_images(args).await?;
+
+                    self.config.current_wallpaper.clone_from(&image[0].path);
+
+                    self.set_wallpaper()?;
+                }
+            }
         }
 
         self.config = config;
