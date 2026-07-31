@@ -46,7 +46,16 @@ impl ScrapeImages {
         .flex(Flex::Center)
         .split(frame.area());
 
-        let slice_size = self.grid_state.cells_in_row();
+        let buf_len = self
+            .image_processor
+            .get_shared_buffer()
+            .with(|buf| buf.len());
+
+        let mut slice_size = self.grid_state.cells_in_row() * self.grid_state.cells_in_column();
+
+        if slice_size > buf_len {
+            slice_size = buf_len;
+        }
 
         self.image_processor
             .get_shared_buffer()
