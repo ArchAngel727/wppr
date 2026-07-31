@@ -119,13 +119,23 @@ impl Scraper {
         Ok(links)
     }
 
-    pub async fn scrape(save_dir: &Path, url: &str) -> Result<Vec<LocalImage>> {
+    pub async fn scrape(
+        save_dir: &Path,
+        url: &str,
+        count: Option<usize>,
+    ) -> Result<Vec<LocalImage>> {
         if !url.starts_with("http") {
             return Err(anyhow!("Invalid url"));
         }
 
+        let count = count.unwrap_or(10);
+
+        if count == 0 || count > 10 {
+            return Err(anyhow!("Invalid `count` value"));
+        }
+
         let page = Self::download_page(url).await?;
-        let links = &Self::scrape_links(&page)?[..10];
+        let links = &Self::scrape_links(&page)?[..count];
 
         let futures: Vec<_> = links
             .iter()
@@ -176,7 +186,11 @@ impl Scraper {
         Ok(tags)
     }
 
-    pub async fn scrape_local_images(path: &Path, tag: Option<String>) -> Result<Vec<LocalImage>> {
+    pub async fn scrape_images(
+        path: &Path,
+        tag: Option<String>,
+        count: Option<usize>,
+    ) -> Result<Vec<LocalImage>> {
         let mut url = String::from("https://wallpaper-a-day.com");
         let tags = Self::scrape_tags().await?;
 
@@ -186,11 +200,11 @@ impl Scraper {
                 url.push_str(tag);
             } else {
                 let e = anyhow!("Tag not found");
-                error!("{e}");
+                error!("{}", e);
                 return Err(e);
             }
         }
 
-        Self::scrape(path, &url).await
+        Self::scrape(path, &url, count).await
     }
 }

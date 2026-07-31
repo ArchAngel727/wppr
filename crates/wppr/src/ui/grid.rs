@@ -6,7 +6,7 @@ use ratatui::{
 use ratatui_image::{Resize, StatefulImage, protocol::StatefulProtocol};
 
 pub struct Grid<'a> {
-    items: &'a mut [StatefulProtocol],
+    items: &'a mut [&'a mut StatefulProtocol],
     cell_size: Size,
     highlight_style: Style,
 }
@@ -20,7 +20,7 @@ pub struct GridState {
 }
 
 impl<'a> Grid<'a> {
-    pub fn new(items: &'a mut [StatefulProtocol], cell_size: Size) -> Self {
+    pub fn new(items: &'a mut [&'a mut StatefulProtocol], cell_size: Size) -> Self {
         Self {
             items,
             cell_size,
@@ -73,7 +73,7 @@ impl StatefulWidget for Grid<'_> {
             StatefulImage::default().resize(Resize::Fit(None)).render(
                 inner_area,
                 buf,
-                &mut self.items[index],
+                self.items[index],
             );
         }
     }
@@ -94,12 +94,20 @@ impl GridState {
         self.selected = Some(sel);
     }
 
+    pub const fn offset(&self) -> usize {
+        self.offset
+    }
+
     pub const fn set_offset(&mut self, off: usize) {
         self.offset = off;
     }
 
     pub const fn selected(&self) -> Option<usize> {
         self.selected
+    }
+
+    pub const fn item_count(&self) -> usize {
+        self.item_count
     }
 
     pub const fn update_item_count(&mut self, count: usize) {
@@ -111,15 +119,38 @@ impl GridState {
         self.cells_in_column = (area.height / cell_size.height) as usize;
     }
 
+    pub const fn cells_in_row(&self) -> usize {
+        self.cells_in_row
+    }
+
+    pub const fn cells_in_column(&self) -> usize {
+        self.cells_in_column
+    }
+
+    const fn can_move_up(&self) -> bool {
+        let Some(selected) = self.selected else {
+            return false;
+        };
+
+        selected < self.offset * self.cells_in_row
+    }
+
+    const fn can_move_down(&self) -> bool {
+        let Some(selected) = self.selected else {
+            return false;
+        };
+
+        selected
+            > (self.offset * self.cells_in_row) + (self.cells_in_row * self.cells_in_column) - 1
+    }
+
     pub const fn move_up(&mut self) {
         if let Some(selected) = self.selected
             && selected >= self.cells_in_row
         {
             self.selected = Some(selected - self.cells_in_row);
 
-            if let Some(selected) = self.selected
-                && selected < self.offset * self.cells_in_row
-            {
+            if self.can_move_up() {
                 self.offset -= 1;
             }
         }
@@ -131,11 +162,7 @@ impl GridState {
         {
             self.selected = Some(selected + self.cells_in_row);
 
-            if let Some(selected) = self.selected
-                && selected
-                    > (self.offset * self.cells_in_row) + (self.cells_in_row * self.cells_in_column)
-                        - 1
-            {
+            if self.can_move_down() {
                 self.offset += 1;
             }
         }
@@ -146,6 +173,10 @@ impl GridState {
             && selected > 0
         {
             self.selected = Some(selected - 1);
+
+            if self.can_move_up() {
+                self.offset -= 1;
+            }
         }
     }
 
@@ -154,6 +185,10 @@ impl GridState {
             && selected + 1 < self.item_count
         {
             self.selected = Some(selected + 1);
+
+            if self.can_move_down() {
+                self.offset += 1;
+            }
         }
     }
 }

@@ -5,12 +5,11 @@ use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Size},
 };
-use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
 use tracing::error;
 
 use crate::{
-    image_buffer::ImageBuffer,
-    image_processor::{ImageProcessor, ImageProcessorArgs},
+    image_processor::ImageProcessor,
     local_image::LocalImage,
     ui::{
         grid::{Grid, GridState},
@@ -21,7 +20,6 @@ use crate::{
 pub struct ScrapeImages {
     grid_state: GridState,
     cell_size: Size,
-    image_buffer: ImageBuffer,
     image_processor: ImageProcessor,
 }
 
@@ -31,16 +29,15 @@ pub enum ScrapeImagesEvent {
 }
 
 impl ScrapeImages {
-    pub fn new(picker: Picker, args: ImageProcessorArgs, cell_size: Size) -> Self {
+    pub fn new(img_processor: ImageProcessor, cell_size: Size) -> Self {
         Self {
             grid_state: GridState::new(),
             cell_size,
-            image_buffer: ImageBuffer::new(),
-            image_processor: ImageProcessor::new(picker, args),
+            image_processor: img_processor,
         }
     }
 
-    pub fn draw(&mut self, frame: &mut Frame) {
+    pub fn draw(&mut self, frame: &mut Frame<'_>) {
         let layout = Layout::vertical(vec![
             Constraint::Length(1),
             Constraint::Fill(1),
@@ -49,18 +46,35 @@ impl ScrapeImages {
         .flex(Flex::Center)
         .split(frame.area());
 
-        self.grid_state.update_item_count(self.image_buffer.len());
-        self.grid_state
-            .update_size(layout[1].as_size(), self.cell_size);
+        let slice_size = self.grid_state.cells_in_row();
 
-        let grid = Grid::new(&mut self.image_buffer.protocols, self.cell_size);
+        self.image_processor
+            .get_shared_buffer()
+            .with_slice(0..slice_size, |slice| {
+                self.grid_state.update_item_count(slice.len());
+                self.grid_state
+                    .update_size(layout[1].as_size(), self.cell_size);
 
-        frame.render_widget(screen::create_top_bar(), layout[0]);
-        frame.render_stateful_widget(grid, layout[1], &mut self.grid_state);
-        frame.render_widget(
-            screen::create_bottom_bar(" <hjkl/←↓↑→> - Move | <Enter> - Select "),
-            layout[2],
-        );
+                for (local_image, protocol) in &mut *slice {
+                    if protocol.is_none() {
+                        self.image_processor.process(local_image.clone());
+                    }
+                }
+
+                let mut protocol_vec: Vec<&mut StatefulProtocol> = slice
+                    .iter_mut()
+                    .filter_map(|(_, protocol)| protocol.as_mut())
+                    .collect();
+
+                let grid = Grid::new(&mut protocol_vec, self.cell_size);
+
+                frame.render_widget(screen::create_top_bar(), layout[0]);
+                frame.render_stateful_widget(grid, layout[1], &mut self.grid_state);
+                frame.render_widget(
+                    screen::create_bottom_bar(" <hjkl/←↓↑→> - Move | <Enter> - Select "),
+                    layout[2],
+                );
+            });
     }
 
     pub async fn event(&mut self, event_stream: &mut EventStream) -> Result<ScrapeImagesEvent> {
@@ -86,15 +100,7 @@ impl ScrapeImages {
                 }
             }
 
-            Some((protocol, local_image)) = self.image_processor.rx.recv() => {
-                if let Ok(protocol) = protocol {
-                    self.image_buffer.protocols.push(protocol);
-                    self.image_buffer.local_images.push(local_image);
-                    self.image_buffer.sort_by_timestamp();
-                } else {
-                    error!("Failed to load image: {}", local_image.path.display());
-                }
-
+            _ = self.image_processor.wait_for_update() => {
                 Ok(ScrapeImagesEvent::Continue)
             }
         }
@@ -110,7 +116,9 @@ impl ScrapeImages {
             KeyCode::Enter => {
                 if let Some(index) = self.grid_state.selected() {
                     return ScrapeImagesEvent::Exit(Some(
-                        self.image_buffer.local_images[index].clone(),
+                        self.image_processor
+                            .get_shared_buffer()
+                            .with(|buffer| buffer.pair_vec[index].0.clone()),
                     ));
                 }
                 return ScrapeImagesEvent::Exit(None);

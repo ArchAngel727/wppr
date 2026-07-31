@@ -1,121 +1,49 @@
 use anyhow::{Result, anyhow};
-use chrono::{DateTime, Utc};
 use image::{DynamicImage, ImageReader};
-use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
-use std::path::PathBuf;
-use tokio::{fs, sync::mpsc};
+use ratatui_image::picker::Picker;
+use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::error;
 
-use crate::{db_manager::DBManager, local_image::LocalImage};
+use crate::{image_buffer::SharedImageBuffer, local_image::LocalImage};
 
 pub struct ImageProcessor {
-    pub rx: mpsc::Receiver<(Result<StatefulProtocol>, LocalImage)>,
-}
-
-#[derive(Clone)]
-pub struct ImageProcessorArgs {
-    path: Option<PathBuf>,
-    local_images: Option<Vec<LocalImage>>,
-}
-
-impl ImageProcessorArgs {
-    pub const fn from_path(path: PathBuf) -> Self {
-        Self {
-            path: Some(path),
-            local_images: None,
-        }
-    }
-
-    pub const fn from_local_images(vec: Vec<LocalImage>) -> Self {
-        Self {
-            path: None,
-            local_images: Some(vec),
-        }
-    }
+    buffer: SharedImageBuffer,
+    tx: mpsc::Sender<LocalImage>,
 }
 
 impl ImageProcessor {
-    pub fn new(picker: Picker, args: ImageProcessorArgs) -> Self {
-        let local_image_rx = if args.path.is_some() {
-            Self::load_images_from_db(args)
-        } else {
-            Self::load_images_from_fs(args)
-        };
+    pub fn new(picker: Picker) -> Self {
+        let shared_buffer = SharedImageBuffer::new();
+        let buf = shared_buffer.clone();
 
+        let (local_image_tx, local_image_rx) = mpsc::channel::<LocalImage>(16);
         let dynamic_image_rx = Self::load_images_from_file(local_image_rx);
-        let protocol_rx = Self::create_protocol_from_image(dynamic_image_rx, picker);
+        Self::create_protocol_from_image(dynamic_image_rx, picker, buf);
 
-        Self { rx: protocol_rx }
+        Self {
+            buffer: shared_buffer,
+            tx: local_image_tx,
+        }
     }
 
-    fn load_images_from_db(args: ImageProcessorArgs) -> mpsc::Receiver<LocalImage> {
-        let (tx, rx) = mpsc::channel::<LocalImage>(16);
-
-        tokio::spawn(async move {
-            let Some(path) = args.path else {
-                error!("Invalid path");
-                return;
-            };
-
-            let img_vec = match DBManager::read_local_images_from_db(&path).await {
-                Ok(vec) => vec,
-                Err(e) => {
-                    error!("{}", e);
-                    return;
-                }
-            };
-
-            for local_image in img_vec {
-                if tx.send(local_image).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        rx
+    pub fn process(&self, image: LocalImage) {
+        match self.tx.try_send(image) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_img)) => {}
+            Err(TrySendError::Closed(_)) => error!("send image channel closed"),
+        }
     }
 
-    fn load_images_from_fs(args: ImageProcessorArgs) -> mpsc::Receiver<LocalImage> {
-        let (tx, rx) = mpsc::channel::<LocalImage>(16);
+    pub fn get_shared_buffer(&self) -> &SharedImageBuffer {
+        &self.buffer
+    }
 
-        tokio::spawn(async move {
-            if let Some(local_images) = args.local_images {
-                for local_image in local_images {
-                    if tx.send(local_image).await.is_err() {
-                        break;
-                    }
-                }
-            }
+    pub async fn push_image(&self, local_image: LocalImage) {
+        self.buffer.push_pair((local_image, None));
+    }
 
-            let Some(path) = args.path else {
-                return;
-            };
-
-            let mut entries = match fs::read_dir(&path).await {
-                Ok(entries) => entries,
-                Err(e) => {
-                    error!("read_dir {}: {}", path.display(), e);
-                    return;
-                }
-            };
-
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let Ok(metadata) = entry.metadata().await else {
-                    continue;
-                };
-
-                let date: DateTime<Utc> =
-                    metadata.modified().ok().map_or(Utc::now(), DateTime::from);
-
-                let local_image = LocalImage::from((entry.path(), date));
-
-                if tx.send(local_image).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        rx
+    pub async fn wait_for_update(&self) {
+        self.buffer.wait_for_update().await;
     }
 
     fn load_images_from_file(
@@ -146,26 +74,21 @@ impl ImageProcessor {
     fn create_protocol_from_image(
         mut image_tx: mpsc::Receiver<(Result<DynamicImage>, LocalImage)>,
         picker: Picker,
-    ) -> mpsc::Receiver<(Result<StatefulProtocol>, LocalImage)> {
-        let (tx, rx) = mpsc::channel::<(Result<StatefulProtocol>, LocalImage)>(16);
-
+        buffer: SharedImageBuffer,
+    ) {
         tokio::spawn(async move {
             while let Some(image) = image_tx.recv().await {
-                let tx = tx.clone();
                 let picker = picker.clone();
+                let buffer = buffer.clone();
 
-                tokio::task::spawn_blocking(move || {
-                    let result = (|| -> Result<StatefulProtocol> {
-                        let image = image.0?;
+                tokio::task::spawn(async move {
+                    let (dyn_image, local_image) = image;
+                    let dyn_image = dyn_image.unwrap();
+                    let protocol = picker.new_resize_protocol(dyn_image);
 
-                        Ok(picker.new_resize_protocol(image))
-                    })();
-
-                    let _ = tx.blocking_send((result, image.1));
+                    buffer.push_pair((local_image, Some(protocol)));
                 });
             }
         });
-
-        rx
     }
 }

@@ -11,7 +11,10 @@ use crossterm::{
 };
 use ratatui::{Frame, Terminal, prelude::CrosstermBackend};
 use ratatui_image::picker::Picker;
-use std::io::{Stdout, stdout};
+use std::{
+    io::{Stdout, stdout},
+    path::PathBuf,
+};
 use tracing::error;
 
 #[cfg(debug_assertions)]
@@ -19,7 +22,8 @@ use tracing::info;
 
 use crate::{
     config::{self, Config},
-    image_processor::ImageProcessorArgs,
+    db_manager::DBManager,
+    image_processor::ImageProcessor,
     scraper::Scraper,
     ui::{
         event::{EventResult, UiResult},
@@ -56,11 +60,7 @@ impl<'a> Ui<'a> {
         })
     }
 
-    pub async fn run(
-        &mut self,
-        screen: Option<Screen>,
-        img_args: Option<ImageProcessorArgs>,
-    ) -> Result<UiResult> {
+    pub async fn run(&mut self, screen: Option<Screen>, path: Option<PathBuf>) -> Result<UiResult> {
         self.terminal.clear()?;
 
         if let Some(screen) = screen {
@@ -69,34 +69,41 @@ impl<'a> Ui<'a> {
                 Screen::TooSmall => unimplemented!("How"),
 
                 Screen::LocalImages => {
-                    let img_args = if let Some(ref img_args) = img_args {
-                        img_args.clone()
+                    let img_processor =
+                        ImageProcessor::new(self.picker.take().expect("Picker already taken"));
+
+                    let path = if let Some(ref path) = path {
+                        path
                     } else {
-                        ImageProcessorArgs::from_path(self.config.save_dir.clone())
+                        &self.config.save_dir
                     };
+
+                    let images = DBManager::read_local_images_from_db(path).await.unwrap();
+
+                    for image in images {
+                        img_processor.push_image(image).await;
+                    }
 
                     self.state.screen = Screen::LocalImages;
                     self.state.local_images = Some(LocalImages::new(
-                        self.picker.take().expect("Picker already taken"),
-                        img_args,
+                        img_processor,
                         config::CELL_SIZE[self.config.cell_size],
                     ));
                 }
 
                 Screen::ScrapeImages => {
-                    let img_args = if let Some(ref img_args) = img_args {
-                        img_args.clone()
-                    } else {
-                        let local_images =
-                            Scraper::scrape_local_images(&self.config.save_dir, None).await?;
+                    let img_processor =
+                        ImageProcessor::new(self.picker.take().expect("Picker already taken"));
 
-                        ImageProcessorArgs::from_local_images(local_images)
-                    };
+                    let images = Scraper::scrape_images(&self.config.save_dir, None, None).await?;
+
+                    for image in images {
+                        img_processor.push_image(image).await;
+                    }
 
                     self.state.screen = Screen::ScrapeImages;
                     self.state.scrape_images = Some(ScrapeImages::new(
-                        self.picker.take().expect("Picker already taken"),
-                        img_args,
+                        img_processor,
                         config::CELL_SIZE[self.config.cell_size],
                     ));
                 }
@@ -110,7 +117,7 @@ impl<'a> Ui<'a> {
             self.terminal
                 .draw(|frame| Self::draw_screen(frame, &mut self.state))?;
 
-            match self.handle_events(img_args.clone()).await {
+            match self.handle_events(path.clone()).await {
                 Ok(event_result) => match event_result {
                     EventResult::Continue => {}
                     EventResult::Exit(ui_result) => {
@@ -128,7 +135,7 @@ impl<'a> Ui<'a> {
         }
     }
 
-    fn draw_screen(frame: &mut Frame, state: &mut UiState) {
+    fn draw_screen(frame: &mut Frame<'_>, state: &mut UiState) {
         let frame_size = frame.area();
 
         if frame_size.width < MIN_SIZE.width || frame_size.height < MIN_SIZE.height {
@@ -160,7 +167,7 @@ impl<'a> Ui<'a> {
         }
     }
 
-    async fn handle_events(&mut self, img_args: Option<ImageProcessorArgs>) -> Result<EventResult> {
+    async fn handle_events(&mut self, path: Option<PathBuf>) -> Result<EventResult> {
         match self.state.screen {
             Screen::Start => match self.state.start.event(&mut self.event_stream).await {
                 screen::start::StartEvent::Continue => Ok(EventResult::Continue),
@@ -170,37 +177,48 @@ impl<'a> Ui<'a> {
 
                     match selected {
                         0 => {
-                            let img_args = if let Some(args) = img_args {
-                                args
+                            let img_processor = ImageProcessor::new(
+                                self.picker.take().expect("Picker already taken"),
+                            );
+
+                            let path = if let Some(ref path) = path {
+                                path
                             } else {
-                                ImageProcessorArgs::from_path(self.config.save_dir.clone())
+                                &self.config.save_dir
                             };
+
+                            let images = DBManager::read_local_images_from_db(path).await.unwrap();
+
+                            for image in images {
+                                img_processor.push_image(image).await;
+                            }
 
                             self.state.screen = Screen::LocalImages;
                             self.state.local_images = Some(LocalImages::new(
-                                self.picker.take().expect("Picker already taken"),
-                                img_args,
+                                img_processor,
                                 config::CELL_SIZE[self.config.cell_size],
                             ));
                         }
-                        1 => {
-                            let img_args = if let Some(args) = img_args {
-                                args
-                            } else {
-                                let local_images =
-                                    Scraper::scrape_local_images(&self.config.save_dir, None)
-                                        .await?;
 
-                                ImageProcessorArgs::from_local_images(local_images)
-                            };
+                        1 => {
+                            let img_processor = ImageProcessor::new(
+                                self.picker.take().expect("Picker already taken"),
+                            );
+
+                            let images =
+                                Scraper::scrape_images(&self.config.save_dir, None, None).await?;
+
+                            for image in images {
+                                img_processor.push_image(image).await;
+                            }
 
                             self.state.screen = Screen::ScrapeImages;
                             self.state.scrape_images = Some(ScrapeImages::new(
-                                self.picker.take().expect("Picker already taken"),
-                                img_args,
+                                img_processor,
                                 config::CELL_SIZE[self.config.cell_size],
                             ));
                         }
+
                         2 => {
                             self.state.screen = Screen::Options;
                             self.state.options = Some(Options::new(self.config.cell_size));

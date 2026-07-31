@@ -12,7 +12,7 @@ use ratatui::{
 
 pub const MIN_SIZE: Size = Size::new(80, 23);
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 pub enum Screen {
     Start,
     TooSmall,

@@ -6,11 +6,9 @@ use tracing::{error, info};
 use wayle::WayleController;
 
 use crate::{
-    cli::Cli,
-    image_processor::ImageProcessorArgs,
-    scraper::Scraper,
+    Config,
+    cli::{self, Cli},
     ui::{Ui, event::UiResult, screen::Screen},
-    {Config, cli},
 };
 
 pub struct App<'a> {
@@ -58,7 +56,7 @@ impl<'a> App<'a> {
     pub fn reload_wallpaper(&self) -> Result<()> {
         if !self.config.current_wallpaper.exists() {
             let e = anyhow!("No wallpaper selected");
-            error!("{e}");
+            error!("{}", e);
             return Err(anyhow!(e));
         }
 
@@ -100,33 +98,32 @@ impl<'a> App<'a> {
             }
 
             Some(cli::Commands::Pick) => {
-                let args = ImageProcessorArgs::from_path(save_dir);
                 let mut ui = Ui::new(&mut config)?;
-                let result = ui.run(Some(Screen::LocalImages), Some(args)).await;
+                let result = ui.run(Some(Screen::LocalImages), Some(save_dir)).await;
 
                 self.match_ui_result(result)?;
             }
 
-            Some(cli::Commands::Scrape { tag, pick }) => {
-                let scraped_local_images = Scraper::scrape_local_images(&save_dir, tag.clone())
-                    .await
-                    .inspect_err(|e| error!("{e:#}"))?;
-
-                if *pick {
-                    let args = ImageProcessorArgs::from_local_images(scraped_local_images);
-                    let mut ui = Ui::new(&mut config)?;
-                    let result = ui.run(Some(Screen::ScrapeImages), Some(args)).await;
-
-                    self.match_ui_result(result)?;
-                    return Ok(());
-                }
-
-                self.config
-                    .current_wallpaper
-                    .clone_from(&scraped_local_images[0].path);
-
-                self.set_wallpaper()?;
-            }
+            Some(cli::Commands::Scrape { tag: _, pick: _ }) => {} // TODO: reimplement tags
+                                                                  // {
+                                                                  //     let scraped_local_images =
+                                                                  //         Scraper::scrape_images(&save_dir, tag.clone(), Some(1)).await?;
+                                                                  //
+                                                                  //     if *pick {
+                                                                  //         let args = ImageProcessorArgs::from_local_images(scraped_local_images);
+                                                                  //         let mut ui = Ui::new(&mut config)?;
+                                                                  //         let result = ui.run(Some(Screen::ScrapeImages), Some(args)).await;
+                                                                  //
+                                                                  //         self.match_ui_result(result)?;
+                                                                  //         return Ok(());
+                                                                  //     }
+                                                                  //
+                                                                  //     self.config
+                                                                  //         .current_wallpaper
+                                                                  //         .clone_from(&scraped_local_images[0].path);
+                                                                  //
+                                                                  //     self.set_wallpaper()?;
+                                                                  // }
         }
 
         self.config = config;
